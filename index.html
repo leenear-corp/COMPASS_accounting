@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>LEENAI COMPASS Dataverse 検証ツール v2.3</title>
+<title>LEENAI COMPASS Dataverse 検証ツール v2.4</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{
@@ -106,7 +106,7 @@
   <header>
     <div class="title-block">
       <div class="title">🔍 COMPASS Dataverse 検証ツール</div>
-      <div class="version">v2.3 (2026-07-16) — 全lookup(標準含む)を_value+FormattedValue方式に統一(modifiedbyname修正)</div>
+      <div class="version">v2.4 (2026-07-16) — 銀行名は個別取得に変更(FormattedValueは内部連番を返す不具合) / $filter追加</div>
     </div>
     <span class="badge" id="loginBadge">未ログイン</span>
   </header>
@@ -141,8 +141,13 @@
         <label>並び順</label>
         <input type="text" id="orderBy" value="modifiedon desc" style="width:220px;">
       </div>
+      <div>
+        <label>絞り込み ($filter, 任意)</label>
+        <input type="text" id="filterQ" value="" placeholder="例: crcf9_payment_date ne null" style="width:320px;">
+      </div>
       <button class="btn btn-primary" id="btnRun" onclick="runQuery()">▶ 実行</button>
     </div>
+    <p class="kv" style="margin-top:6px;">💡 進行中(未確定)のbookingはnullが多いのが正常です。完了済みのデータだけ見たい場合は絞り込みに <code>crcf9_payment_date ne null</code> などを入力してください。</p>
     <div id="queryAlert"></div>
   </div>
 
@@ -356,10 +361,14 @@ async function runQuery(){
 
   const topN    = document.getElementById('topN').value || 3;
   const orderBy = document.getElementById('orderBy').value || 'modifiedon desc';
+  const filterQ = document.getElementById('filterQ').value.trim();
 
   try{
     setLoadingMsg('booking 一覧を取得中...');
-    const path = `cr49f_bookings?$select=${BOOKING_SELECT.join(',')}&$orderby=${encodeURIComponent(orderBy)}&$top=${topN}`;
+    let path = `cr49f_bookings?$select=${BOOKING_SELECT.join(',')}&$orderby=${encodeURIComponent(orderBy)}&$top=${topN}`;
+    if (filterQ){
+      path += `&$filter=${encodeURIComponent(filterQ)}`;
+    }
     const data = await dvGet(path);
     const bookings = data.value || [];
 
@@ -398,10 +407,25 @@ function setLoadingMsg(msg){
 // booking 1件ぶんの関連データ（乙仲マスター・船社運賃マスター・コンテナ明細）を個別取得
 async function enrichBooking(b){
   const extra = {
+    bank: null, bankError: null,
     customs: null, customsError: null,
     carrierCost: null, carrierCostError: null,
     containers: [], containersError: null,
   };
+
+  // 売上: crcf9_bank_list マスター個別取得
+  // ⚠️ lookupのFormattedValueは crcf9_bank_list の「プライマリ名前フィールド」を返すだけであり、
+  //    それが crcf9_bank_name（実際の銀行名）でない場合（内部連番等）は名前として使えない。
+  //    そのため必ず個別取得で crcf9_bank_name を明示的に取得する。
+  const bankGuid = lookupGuid(b, '_crcf9_bank_id_value');
+  if (bankGuid){
+    try{
+      extra.bank = await dvGetWithFallback(
+        ['crcf9_bank_lists','crcf9_bank_listses'],
+        `(${bankGuid})?$select=crcf9_bank_name,crcf9_branch_name`
+      );
+    }catch(e){ extra.bankError = e.message; }
+  }
 
   // 通関: crcf9_customs マスター個別取得
   const fowarderGuid = lookupGuid(b, '_cr49f_fowarder_id_value');
@@ -503,7 +527,11 @@ function renderOneBooking(b, extra){
 
       <div class="calc-block">
         <div class="label">売上 <span class="tag tag-stored">保存値</span></div>
-        <div class="calc-line">銀行名: ${fmtVal(lookupName(b, '_crcf9_bank_id_value'))}</div>
+        <div class="calc-line">銀行名: ${
+          extra.bankError ? `<span style="color:var(--err)">⚠️ ${extra.bankError}</span>` :
+          extra.bank ? fmtVal(extra.bank.crcf9_bank_name) + (extra.bank.crcf9_branch_name ? ' '+fmtVal(extra.bank.crcf9_branch_name) : '') :
+          lookupGuid(b, '_crcf9_bank_id_value') ? '<span class="fill-null">(未取得)</span>' : fmtVal(null)
+        }</div>
         <div class="calc-line">銀行提出日: ${fmtDate(b.crcf9_bank_submisson_date)}</div>
         <div class="calc-line">買取有無: ${fmtVal(b.crcf9_purchase_status)}</div>
         <div class="calc-line">着金日: ${fmtDate(b.crcf9_payment_date)}</div>
@@ -588,5 +616,4 @@ function renderOneBooking(b, extra){
 </script>
 </body>
 </html>
-
 
