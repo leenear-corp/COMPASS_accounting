@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>LEENAI COMPASS Dataverse 検証ツール v2.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --bg:#0f1117; --bg2:#1a1d27; --bg3:#242736; --border:#2e3244;
+    --accent:#4f8ef7; --accent2:#7c5cf7;
+    --ok:#2dd4a0; --warn:#f7b84f; --err:#f75f5f;
+    --text:#e8eaf0; --text2:#9aa0b8; --text3:#565c78;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;
+    font-size:14px;
+  }
+  .wrap{max-width:1300px; margin:0 auto; padding:20px;}
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding-bottom:14px; border-bottom:1px solid var(--border); margin-bottom:20px;
+  }
+  .title-block .title{font-size:16px; font-weight:700;}
+  .title-block .version{font-size:11px; color:var(--text3); margin-top:2px;}
+  .badge{
+    background:var(--bg3); border:1px solid var(--border); color:var(--text2);
+    padding:4px 10px; border-radius:20px; font-size:11px;
+  }
+  .card{
+    background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+    padding:18px; margin-bottom:16px;
+  }
+  .card h3{margin:0 0 10px; font-size:13px; color:var(--text2); font-weight:700;}
+  .card h4{margin:16px 0 8px; font-size:12px; color:var(--accent); font-weight:700;}
+  .btn{
+    display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+    border:none; border-radius:8px; padding:10px 18px; font-size:13px; font-weight:600;
+    font-family:inherit;
+  }
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff;}
+  .btn-secondary{background:var(--bg3); color:var(--text); border:1px solid var(--border);}
+  .btn-secondary:hover{border-color:var(--accent); color:var(--accent);}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  input[type="text"], input[type="number"]{
+    background:var(--bg3); border:1px solid var(--border); color:var(--text);
+    padding:9px 12px; border-radius:8px; font-size:13px; font-family:inherit;
+  }
+  label{font-size:12px; color:var(--text2); display:block; margin-bottom:5px;}
+  .row{display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end;}
+  .alert{padding:12px 14px; border-radius:8px; font-size:12.5px; margin-top:12px; line-height:1.6;}
+  .alert.info{background:rgba(79,142,247,.12); border:1px solid var(--accent); color:var(--accent);}
+  .alert.ok{background:rgba(45,212,160,.12); border:1px solid var(--ok); color:var(--ok);}
+  .alert.warn{background:rgba(247,184,79,.12); border:1px solid var(--warn); color:var(--warn);}
+  .alert.err{background:rgba(247,95,95,.12); border:1px solid var(--err); color:var(--err);}
+  pre{
+    background:#0a0b10; border:1px solid var(--border); border-radius:8px;
+    padding:14px; font-size:12px; overflow-x:auto; color:#c9d1e8;
+    font-family:'Consolas','Monaco',monospace; line-height:1.55; max-height:420px;
+  }
+  table{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:10px;}
+  th,td{border-bottom:1px solid var(--border); padding:7px 10px; text-align:left; white-space:nowrap;}
+  th{color:var(--text2); font-weight:600; background:var(--bg3); position:sticky; top:0;}
+  td{color:var(--text);}
+  .fill-null{color:var(--text3); font-style:italic;}
+  .tbl-scroll{max-height:520px; overflow:auto; border:1px solid var(--border); border-radius:8px;}
+  .hidden{display:none !important;}
+  .spinner{
+    width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .8s linear infinite; display:inline-block;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .kv{font-size:12px; color:var(--text2);}
+  .kv b{color:var(--text);}
+  .booking-card{
+    background:var(--bg3); border:1px solid var(--border); border-radius:10px;
+    padding:14px; margin-bottom:14px;
+  }
+  .booking-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);
+  }
+  .booking-head .inv{font-weight:700; color:var(--accent);}
+  .booking-head .bkg{font-size:11px; color:var(--text3);}
+  .calc-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;}
+  .calc-block{background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px;}
+  .calc-block .label{font-size:11px; color:var(--text2); font-weight:700; margin-bottom:6px;}
+  .calc-line{font-size:11.5px; color:var(--text2); margin:2px 0; font-family:'Consolas','Monaco',monospace;}
+  .calc-result{font-size:14px; font-weight:700; color:var(--ok); margin-top:6px;}
+  .calc-result.warn{color:var(--warn);}
+  .calc-result.err{color:var(--err);}
+  .tag{display:inline-block; font-size:10px; padding:1px 6px; border-radius:10px; margin-left:6px;}
+  .tag-master{background:rgba(124,92,247,.18); color:var(--accent2);}
+  .tag-stored{background:rgba(45,212,160,.18); color:var(--ok);}
+  .tag-calc{background:rgba(247,184,79,.18); color:var(--warn);}
+  footer{
+    text-align:center; font-size:11px; color:var(--text3); margin-top:30px; padding-top:16px;
+    border-top:1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <div class="title">🔍 COMPASS Dataverse 検証ツール</div>
+      <div class="version">v2.0 (2026-07-16) — 売上/Commission/仕入/運送料/通関/海上/海上保険料 7タブ計算式一括検証</div>
+    </div>
+    <span class="badge" id="loginBadge">未ログイン</span>
+  </header>
+
+  <!-- ログイン -->
+  <div class="card" id="loginCard">
+    <h3>① Microsoft ログイン (Dataverse)</h3>
+    <p class="kv">既存の LEENAI-ShippingSchedule アプリ（Client ID: f071a165...）を再利用します。<br>
+    このツールは <b>GitHub Pages にデプロイした URL</b> でのみ動作します（Redirect URI 登録が必要）。</p>
+    <button class="btn btn-primary" id="btnLogin" onclick="startLogin()">🔑 ログイン</button>
+    <div class="alert warn" id="redirectWarning">
+      ⚠️ 現在の REDIRECT_URI は <code id="redirectUriShow"></code> です。<br>
+      Azure Portal → LEENAI-ShippingSchedule → 認証 に、この URL が SPA Redirect URI として登録されていない場合、
+      ログイン後に <b>AADSTS50011</b> エラーが出ます。mh_lee@ に登録を依頼してください。
+    </div>
+  </div>
+
+  <!-- クエリ実行 -->
+  <div class="card hidden" id="queryCard">
+    <h3>② booking を取得 → 各タブの計算式を検証</h3>
+    <p class="kv">
+      DOC-COMPASS-SALES v0.3 で確定した公式を実データで再確認します。<br>
+      <b>$expand は使用しません</b>。乙仲(通関)・船社運賃(海上)マスター、コンテナ明細(仕入/運送料)は booking ごとに個別取得します（N+1パターン）。<br>
+      件数が多いと呼び出し回数が増えるため、まず少数（3〜5件）で確認することを推奨します。
+    </p>
+    <div class="row" style="margin-top:12px;">
+      <div>
+        <label>取得件数 ($top)</label>
+        <input type="number" id="topN" value="3" min="1" max="15" style="width:90px;">
+      </div>
+      <div>
+        <label>並び順</label>
+        <input type="text" id="orderBy" value="modifiedon desc" style="width:220px;">
+      </div>
+      <button class="btn btn-primary" id="btnRun" onclick="runQuery()">▶ 実行</button>
+    </div>
+    <div id="queryAlert"></div>
+  </div>
+
+  <!-- ローディング -->
+  <div class="card hidden" id="loadingCard">
+    <span class="spinner"></span> <span class="kv" id="loadingMsg">Dataverse に問い合わせ中...</span>
+  </div>
+
+  <!-- 結果: booking別カード -->
+  <div class="card hidden" id="resultCard">
+    <h3>③ Booking別 7タブ計算結果</h3>
+    <div id="bookingCards"></div>
+  </div>
+
+  <!-- 結果: RAW JSON -->
+  <div class="card hidden" id="rawCard">
+    <h3>④ RAW レスポンス（最初の booking の全取得データ）</h3>
+    <pre id="rawJson"></pre>
+  </div>
+
+  <footer>
+    ✦ Powered by LEENAI Automation System<br>
+    LEENAI (리나이) — LEENEAR CORPORATION AIアシスタント
+  </footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// 定数
+// ═══════════════════════════════════════════════
+const CLIENT_ID    = 'f071a165-5e9b-44bf-b6a1-baba654524db';
+const TENANT_ID    = 'a56988ff-c2b8-4df8-9727-889ad4205198';
+const REDIRECT_URI = location.origin + location.pathname; // ⚠️ ハードコード原則: デプロイ後は固定URLになる
+
+const DV_URL   = 'https://orgde512c6f.crm7.dynamics.com';
+const DV_API   = `${DV_URL}/api/data/v9.2`;
+const SCOPE    = `${DV_URL}/user_impersonation openid profile`;
+
+// booking から取得するフィールド（DOC-COMPASS-SALES v0.3 §2・§3 準拠）
+const BOOKING_SELECT = [
+  'cr49f_bookingid','cr49f_booking_no','cr49f_invoice_no',
+  // 売上タブ
+  'crcf9_bank_idname','crcf9_bank_submisson_date','crcf9_purchase_status',
+  'crcf9_payment_date','crcf9_expected_payment_date',
+  'crcf9_sell_price_usd','crcf9_sell_price_yen',
+  // Commissionタブ
+  'crcf9_commission_amount_usd','crcf9_commission_amount_yen','crcf9_agent_payment_date',
+  // 通関タブ（乙仲マスター参照用キー + 支払日）
+  'cr49f_fowarder_id','cr49f_fowarder_idname','crcf9_custom_payment_date',
+  // 海上タブ（船社運賃マスター参照用キー + BL為替 + 支払日）
+  'cr49f_carrier_cost_id','cr49f_carrier_cost_idname','crcf9_bl_exchange_rate',
+  'crcf9_maritime_freight_payment_date',
+  // 海上保険料タブ
+  'crcf9_insurance_premiums','crcf9_bl_insurance_exchange_rate','crcf9_icc','crcf9_insurance_fee_updated',
+  'modifiedon','modifiedbyname',
+];
+
+let accessToken = null;
+
+// ═══════════════════════════════════════════════
+// PKCE ヘルパー
+// ═══════════════════════════════════════════════
+function b64url(buf){
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function sha256(str){
+  const enc = new TextEncoder().encode(str);
+  return crypto.subtle.digest('SHA-256', enc);
+}
+function randomStr(len=64){
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  return b64url(arr).slice(0, len);
+}
+
+async function startLogin(){
+  const verifier  = randomStr(64);
+  const challenge = b64url(await sha256(verifier));
+  const state     = randomStr(16);
+
+  sessionStorage.setItem('pkce_v', verifier);
+  sessionStorage.setItem('pkce_s', state);
+
+  const params = new URLSearchParams({
+    client_id:             CLIENT_ID,
+    response_type:         'code',
+    redirect_uri:          REDIRECT_URI,
+    scope:                 SCOPE,
+    state:                 state,
+    code_challenge:        challenge,
+    code_challenge_method: 'S256',
+    prompt:                'select_account',
+  });
+
+  location.href = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize?${params}`;
+}
+
+async function handleCallback(){
+  const params = new URLSearchParams(location.search);
+  const code   = params.get('code');
+  const state  = params.get('state');
+  if (!code) return false;
+
+  if (state !== sessionStorage.getItem('pkce_s')){
+    alert('State mismatch — セキュリティエラー。再度ログインしてください。');
+    return false;
+  }
+
+  const verifier = sessionStorage.getItem('pkce_v');
+
+  const res = await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     CLIENT_ID,
+      grant_type:    'authorization_code',
+      code:          code,
+      redirect_uri:  REDIRECT_URI,
+      code_verifier: verifier,
+      scope:         SCOPE,
+    }),
+  });
+
+  const data = await res.json();
+  if (data.error){
+    showAlert('queryAlert', 'err', `Token取得エラー: ${data.error_description || data.error}`);
+    return false;
+  }
+
+  accessToken = data.access_token;
+
+  history.replaceState({}, '', REDIRECT_URI);
+  sessionStorage.removeItem('pkce_v');
+  sessionStorage.removeItem('pkce_s');
+
+  return true;
+}
+
+// ═══════════════════════════════════════════════
+// Dataverse bare query (※ $expand は絶対に使わない)
+// ═══════════════════════════════════════════════
+async function dvGet(path){
+  const res = await fetch(`${DV_API}/${path}`, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'OData-MaxVersion': '4.0',
+      'OData-Version': '4.0',
+      'Accept': 'application/json',
+      'Prefer': 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"',
+    },
+  });
+  if (!res.ok){
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`API Error ${res.status}: ${err?.error?.message || res.statusText}`);
+  }
+  return res.json();
+}
+
+// entity set 名の複数形が不確実なテーブル用: 候補を順に試す
+async function dvGetWithFallback(candidates, suffix){
+  let lastErr = null;
+  for (const set of candidates){
+    try{
+      return await dvGet(`${set}${suffix}`);
+    }catch(e){
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
+function showAlert(containerId, type, html){
+  const el = document.getElementById(containerId);
+  el.innerHTML = `<div class="alert ${type}">${html}</div>`;
+}
+
+function fmtVal(v, unit){
+  if (v === null || v === undefined || v === '') return '<span class="fill-null">null</span>';
+  if (typeof v === 'number') return v.toLocaleString() + (unit||'');
+  return String(v).replace(/</g,'&lt;');
+}
+
+function fmtDate(v){
+  if (!v) return '<span class="fill-null">null</span>';
+  return String(v).slice(0,10);
+}
+
+// ═══════════════════════════════════════════════
+// メインクエリ
+// ═══════════════════════════════════════════════
+async function runQuery(){
+  document.getElementById('btnRun').disabled = true;
+  document.getElementById('loadingCard').classList.remove('hidden');
+  document.getElementById('resultCard').classList.add('hidden');
+  document.getElementById('rawCard').classList.add('hidden');
+  document.getElementById('queryAlert').innerHTML = '';
+
+  const topN    = document.getElementById('topN').value || 3;
+  const orderBy = document.getElementById('orderBy').value || 'modifiedon desc';
+
+  try{
+    setLoadingMsg('booking 一覧を取得中...');
+    const path = `cr49f_bookings?$select=${BOOKING_SELECT.join(',')}&$orderby=${encodeURIComponent(orderBy)}&$top=${topN}`;
+    const data = await dvGet(path);
+    const bookings = data.value || [];
+
+    if (bookings.length === 0){
+      showAlert('queryAlert', 'warn', '⚠️ 0件でした。条件を確認してください。');
+      return;
+    }
+
+    showAlert('queryAlert', 'ok', `✅ booking ${bookings.length}件取得。各タブの関連マスター・コンテナ明細を個別取得して計算式を検証します...`);
+
+    const enriched = [];
+    for (let i = 0; i < bookings.length; i++){
+      setLoadingMsg(`booking ${i+1}/${bookings.length} の関連データ取得中...`);
+      const b = bookings[i];
+      const extra = await enrichBooking(b);
+      enriched.push({ booking: b, extra });
+    }
+
+    renderBookings(enriched);
+
+    document.getElementById('rawJson').textContent = JSON.stringify(enriched[0], null, 2);
+    document.getElementById('rawCard').classList.remove('hidden');
+
+  }catch(e){
+    showAlert('queryAlert', 'err', `❌ 取得失敗: ${fmtVal(e.message)}`);
+  }finally{
+    document.getElementById('loadingCard').classList.add('hidden');
+    document.getElementById('btnRun').disabled = false;
+  }
+}
+
+function setLoadingMsg(msg){
+  document.getElementById('loadingMsg').textContent = msg;
+}
+
+// booking 1件ぶんの関連データ（乙仲マスター・船社運賃マスター・コンテナ明細）を個別取得
+async function enrichBooking(b){
+  const extra = {
+    customs: null, customsError: null,
+    carrierCost: null, carrierCostError: null,
+    containers: [], containersError: null,
+  };
+
+  // 通関: crcf9_customs マスター個別取得
+  if (b.cr49f_fowarder_id){
+    try{
+      extra.customs = await dvGetWithFallback(
+        ['crcf9_customses','crcf9_customs'],
+        `(${b.cr49f_fowarder_id})?$select=crcf9_forwarder,crcf9_custom_fee,crcf9_forwarder_cost,crcf9_pol`
+      );
+    }catch(e){ extra.customsError = e.message; }
+  }
+
+  // 海上: crcf9_carrier_cost マスター個別取得
+  if (b.cr49f_carrier_cost_id){
+    try{
+      extra.carrierCost = await dvGet(
+        `crcf9_carrier_costs(${b.cr49f_carrier_cost_id})?$select=crcf9_carrier_name,crcf9_cost_per_van_usd,crcf9_cost_per_bl,crcf9_cost_per_van_jpy`
+      );
+    }catch(e){ extra.carrierCostError = e.message; }
+  }
+
+  // 仕入/運送料: このbookingに紐づくコンテナ明細
+  try{
+    const res = await dvGet(
+      `crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${b.cr49f_bookingid}` +
+      `&$select=crcf9_container_no,crcf9_purchase_price,crcf9_n_w,crcf9_purchase_payment_date,` +
+               `crcf9_dray_cost,crcf9_other_expense,crcf9_dray_payment_date`
+    );
+    extra.containers = res.value || [];
+  }catch(e){ extra.containersError = e.message; }
+
+  return extra;
+}
+
+// ═══════════════════════════════════════════════
+// 描画: booking別カード（7タブの計算結果を並べる）
+// ═══════════════════════════════════════════════
+function renderBookings(enriched){
+  const container = document.getElementById('bookingCards');
+  container.innerHTML = enriched.map(({booking:b, extra}) => renderOneBooking(b, extra)).join('');
+  document.getElementById('resultCard').classList.remove('hidden');
+}
+
+function renderOneBooking(b, extra){
+  const cntr = extra.containers.length;
+
+  // 仕入額 = 単価 × n_w（n_wはkg単位保存 → §3-3公式そのまま）
+  let purchaseTotal = 0, purchaseTotalTax = 0;
+  const containerRows = extra.containers.map(c => {
+    const price = c.crcf9_purchase_price || 0;
+    const nw    = c.crcf9_n_w || 0;
+    const amt   = price * nw;
+    purchaseTotal += amt;
+    purchaseTotalTax += amt * 1.1;
+    return { ...c, _calcAmt: amt };
+  });
+
+  // 運送料 = dray_cost + other_expense の合計（container別の合計）
+  let drayTotal = 0;
+  extra.containers.forEach(c => {
+    drayTotal += (c.crcf9_dray_cost || 0) + (c.crcf9_other_expense || 0);
+  });
+
+  // 通関 = custom_fee + forwarder_cost（マスター、booking単位で1回）
+  let customTotal = null, customDetail = '';
+  if (extra.customs){
+    const fee = extra.customs.crcf9_custom_fee || 0;
+    const cost = extra.customs.crcf9_forwarder_cost || 0;
+    customTotal = fee + cost;
+    customDetail = `${fmtVal(fee)} (通関料) + ${fmtVal(cost)} (手数料)`;
+  }
+
+  // 海上 = USD×cntr×為替 + Doc(cost_per_bl) + Seal(cost_per_van_jpy×cntr)
+  let maritimeUsd=null, maritimeJpy=null, doc=null, seal=null, maritimeTotal=null;
+  if (extra.carrierCost){
+    const usdRate = extra.carrierCost.crcf9_cost_per_van_usd || 0;
+    const bl_rate = b.crcf9_bl_exchange_rate || 0;
+    const cost_per_bl = extra.carrierCost.crcf9_cost_per_bl || 0;
+    const cost_per_van_jpy = extra.carrierCost.crcf9_cost_per_van_jpy || 0;
+    maritimeUsd = usdRate * cntr;
+    maritimeJpy = maritimeUsd * bl_rate;
+    doc = cost_per_bl;
+    seal = cost_per_van_jpy * cntr;
+    maritimeTotal = maritimeJpy + doc + seal;
+  }
+
+  return `
+  <div class="booking-card">
+    <div class="booking-head">
+      <div>
+        <span class="inv">${fmtVal(b.cr49f_invoice_no)}</span>
+        <span class="bkg">BKG: ${fmtVal(b.cr49f_booking_no)} | コンテナ数: ${cntr}本</span>
+      </div>
+      <div class="kv">更新: ${fmtDate(b.modifiedon)} (${fmtVal(b.modifiedbyname)})</div>
+    </div>
+
+    <div class="calc-grid">
+
+      <div class="calc-block">
+        <div class="label">売上 <span class="tag tag-stored">保存値</span></div>
+        <div class="calc-line">銀行名: ${fmtVal(b.crcf9_bank_idname)}</div>
+        <div class="calc-line">銀行提出日: ${fmtDate(b.crcf9_bank_submisson_date)}</div>
+        <div class="calc-line">買取有無: ${fmtVal(b.crcf9_purchase_status)}</div>
+        <div class="calc-line">着金日: ${fmtDate(b.crcf9_payment_date)}</div>
+        <div class="calc-result">$${fmtVal(b.crcf9_sell_price_usd)} / ¥${fmtVal(b.crcf9_sell_price_yen)}</div>
+      </div>
+
+      <div class="calc-block">
+        <div class="label">Commission <span class="tag tag-stored">保存値</span></div>
+        <div class="calc-line">エージェント支払日: ${fmtDate(b.crcf9_agent_payment_date)}</div>
+        <div class="calc-result">$${fmtVal(b.crcf9_commission_amount_usd)} / ¥${fmtVal(b.crcf9_commission_amount_yen)}</div>
+      </div>
+
+      <div class="calc-block">
+        <div class="label">海上保険料 <span class="tag tag-stored">保存値</span></div>
+        <div class="calc-line">ICC: ${fmtVal(b.crcf9_icc)}</div>
+        <div class="calc-line">保険為替: ${fmtVal(b.crcf9_bl_insurance_exchange_rate)}</div>
+        <div class="calc-result">¥${fmtVal(b.crcf9_insurance_premiums)}</div>
+      </div>
+
+      <div class="calc-block">
+        <div class="label">仕入 <span class="tag tag-calc">計算: 単価×n_w</span></div>
+        ${extra.containersError ? `<div class="calc-line" style="color:var(--err)">${extra.containersError}</div>` :
+          containerRows.slice(0,3).map(c =>
+            `<div class="calc-line">${fmtVal(c.crcf9_container_no)}: ${fmtVal(c.crcf9_purchase_price)}×${fmtVal(c.crcf9_n_w)}kg=${fmtVal(Math.round(c._calcAmt))}</div>`
+          ).join('') + (containerRows.length>3 ? `<div class="calc-line">...他${containerRows.length-3}本</div>` : '')
+        }
+        <div class="calc-result">¥${fmtVal(Math.round(purchaseTotal))} (税込¥${fmtVal(Math.round(purchaseTotalTax))})</div>
+      </div>
+
+      <div class="calc-block">
+        <div class="label">運送料 <span class="tag tag-stored">保存値(合計)</span></div>
+        ${extra.containersError ? `<div class="calc-line" style="color:var(--err)">${extra.containersError}</div>` :
+          `<div class="calc-line">運賃+高速道路etc の合計（${cntr}本分）</div>`
+        }
+        <div class="calc-result">¥${fmtVal(Math.round(drayTotal))}</div>
+      </div>
+
+      <div class="calc-block">
+        <div class="label">通関 <span class="tag tag-master">マスター参照</span></div>
+        ${extra.customsError ? `<div class="calc-line" style="color:var(--err)">⚠️ ${extra.customsError}</div>` :
+          extra.customs ? `<div class="calc-line">乙仲: ${fmtVal(extra.customs.crcf9_forwarder)} (POL: ${fmtVal(extra.customs.crcf9_pol)})</div>
+          <div class="calc-line">${customDetail}</div>
+          <div class="calc-line">支払日: ${fmtDate(b.crcf9_custom_payment_date)}</div>` :
+          `<div class="calc-line fill-null">乙仲未設定</div>`
+        }
+        <div class="calc-result ${extra.customsError?'err':''}">${customTotal!==null ? '¥'+fmtVal(customTotal) : '—'}</div>
+      </div>
+
+      <div class="calc-block">
+        <div class="label">海上 <span class="tag tag-master">マスター参照</span></div>
+        ${extra.carrierCostError ? `<div class="calc-line" style="color:var(--err)">⚠️ ${extra.carrierCostError}</div>` :
+          extra.carrierCost ? `
+          <div class="calc-line">船社: ${fmtVal(extra.carrierCost.crcf9_carrier_name)} | BL為替: ${fmtVal(b.crcf9_bl_exchange_rate)}</div>
+          <div class="calc-line">運賃USD: ${fmtVal(extra.carrierCost.crcf9_cost_per_van_usd)}×${cntr}=${fmtVal(Math.round(maritimeUsd))}</div>
+          <div class="calc-line">運賃JPY: ${fmtVal(Math.round(maritimeUsd))}×${fmtVal(b.crcf9_bl_exchange_rate)}=${fmtVal(Math.round(maritimeJpy))}</div>
+          <div class="calc-line">Doc(cost_per_bl): ${fmtVal(doc)} / Seal: ${fmtVal(extra.carrierCost.crcf9_cost_per_van_jpy)}×${cntr}=${fmtVal(seal)}</div>` :
+          `<div class="calc-line fill-null">船社運賃未設定</div>`
+        }
+        <div class="calc-result ${extra.carrierCostError?'err':''}">${maritimeTotal!==null ? '¥'+fmtVal(Math.round(maritimeTotal)) : '—'}</div>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// 初期化
+// ═══════════════════════════════════════════════
+(async () => {
+  document.getElementById('redirectUriShow').textContent = REDIRECT_URI;
+
+  const params = new URLSearchParams(location.search);
+  if (params.get('code')){
+    const ok = await handleCallback();
+    if (ok){
+      document.getElementById('loginBadge').textContent = '✅ ログイン済み';
+      document.getElementById('loginCard').classList.add('hidden');
+      document.getElementById('queryCard').classList.remove('hidden');
+    }
+  }
+})();
+</script>
+</body>
+</html>
