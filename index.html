@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>LEENAI COMPASS Dataverse 検証ツール v2.1</title>
+<title>LEENAI COMPASS Dataverse 検証ツール v2.2</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{
@@ -106,7 +106,7 @@
   <header>
     <div class="title-block">
       <div class="title">🔍 COMPASS Dataverse 検証ツール</div>
-      <div class="version">v2.1 (2026-07-16) — 専用Azureアプリ(LEENAI-COMPASS-Accounting)に切替 / 7タブ計算式一括検証</div>
+      <div class="version">v2.2 (2026-07-16) — カスタムlookupの_idname不可バグ修正(_value+FormattedValue方式に変更)</div>
     </div>
     <span class="badge" id="loginBadge">未ログイン</span>
   </header>
@@ -185,15 +185,15 @@ const SCOPE    = `${DV_URL}/user_impersonation openid profile`;
 const BOOKING_SELECT = [
   'cr49f_bookingid','cr49f_booking_no','cr49f_invoice_no',
   // 売上タブ
-  'crcf9_bank_idname','crcf9_bank_submisson_date','crcf9_purchase_status',
+  '_crcf9_bank_id_value','crcf9_bank_submisson_date','crcf9_purchase_status',
   'crcf9_payment_date','crcf9_expected_payment_date',
   'crcf9_sell_price_usd','crcf9_sell_price_yen',
   // Commissionタブ
   'crcf9_commission_amount_usd','crcf9_commission_amount_yen','crcf9_agent_payment_date',
   // 通関タブ（乙仲マスター参照用キー + 支払日）
-  'cr49f_fowarder_id','cr49f_fowarder_idname','crcf9_custom_payment_date',
+  '_cr49f_fowarder_id_value','crcf9_custom_payment_date',
   // 海上タブ（船社運賃マスター参照用キー + BL為替 + 支払日）
-  'cr49f_carrier_cost_id','cr49f_carrier_cost_idname','crcf9_bl_exchange_rate',
+  '_cr49f_carrier_cost_id_value','crcf9_bl_exchange_rate',
   'crcf9_maritime_freight_payment_date',
   // 海上保険料タブ
   'crcf9_insurance_premiums','crcf9_bl_insurance_exchange_rate','crcf9_icc','crcf9_insurance_fee_updated',
@@ -331,6 +331,16 @@ function fmtDate(v){
   return String(v).slice(0,10);
 }
 
+// カスタムlookupは _fieldname_value でGUIDを取得し、表示名は付随するFormattedValueアノテーションから読む
+// （owner/createdby/modifiedby等の標準lookupと違い、カスタムlookupには "xxx_idname" 列は存在しない）
+function lookupGuid(record, valueField){
+  return record[valueField] || null;
+}
+function lookupName(record, valueField){
+  const fv = record[`${valueField}@OData.Community.Display.V1.FormattedValue`];
+  return fv || record[valueField] || null;
+}
+
 // ═══════════════════════════════════════════════
 // メインクエリ
 // ═══════════════════════════════════════════════
@@ -391,20 +401,22 @@ async function enrichBooking(b){
   };
 
   // 通関: crcf9_customs マスター個別取得
-  if (b.cr49f_fowarder_id){
+  const fowarderGuid = lookupGuid(b, '_cr49f_fowarder_id_value');
+  if (fowarderGuid){
     try{
       extra.customs = await dvGetWithFallback(
         ['crcf9_customses','crcf9_customs'],
-        `(${b.cr49f_fowarder_id})?$select=crcf9_forwarder,crcf9_custom_fee,crcf9_forwarder_cost,crcf9_pol`
+        `(${fowarderGuid})?$select=crcf9_forwarder,crcf9_custom_fee,crcf9_forwarder_cost,crcf9_pol`
       );
     }catch(e){ extra.customsError = e.message; }
   }
 
   // 海上: crcf9_carrier_cost マスター個別取得
-  if (b.cr49f_carrier_cost_id){
+  const carrierCostGuid = lookupGuid(b, '_cr49f_carrier_cost_id_value');
+  if (carrierCostGuid){
     try{
       extra.carrierCost = await dvGet(
-        `crcf9_carrier_costs(${b.cr49f_carrier_cost_id})?$select=crcf9_carrier_name,crcf9_cost_per_van_usd,crcf9_cost_per_bl,crcf9_cost_per_van_jpy`
+        `crcf9_carrier_costs(${carrierCostGuid})?$select=crcf9_carrier_name,crcf9_cost_per_van_usd,crcf9_cost_per_bl,crcf9_cost_per_van_jpy`
       );
     }catch(e){ extra.carrierCostError = e.message; }
   }
@@ -488,7 +500,7 @@ function renderOneBooking(b, extra){
 
       <div class="calc-block">
         <div class="label">売上 <span class="tag tag-stored">保存値</span></div>
-        <div class="calc-line">銀行名: ${fmtVal(b.crcf9_bank_idname)}</div>
+        <div class="calc-line">銀行名: ${fmtVal(lookupName(b, '_crcf9_bank_id_value'))}</div>
         <div class="calc-line">銀行提出日: ${fmtDate(b.crcf9_bank_submisson_date)}</div>
         <div class="calc-line">買取有無: ${fmtVal(b.crcf9_purchase_status)}</div>
         <div class="calc-line">着金日: ${fmtDate(b.crcf9_payment_date)}</div>
@@ -573,4 +585,5 @@ function renderOneBooking(b, extra){
 </script>
 </body>
 </html>
+
 
