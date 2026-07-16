@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>LEENAI COMPASS Dataverse 検証ツール v2.0</title>
+<title>LEENAI COMPASS Dataverse 検証ツール v2.1</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{
@@ -106,7 +106,7 @@
   <header>
     <div class="title-block">
       <div class="title">🔍 COMPASS Dataverse 検証ツール</div>
-      <div class="version">v2.0 (2026-07-16) — 売上/Commission/仕入/運送料/通関/海上/海上保険料 7タブ計算式一括検証</div>
+      <div class="version">v2.1 (2026-07-16) — 専用Azureアプリ(LEENAI-COMPASS-Accounting)に切替 / 7タブ計算式一括検証</div>
     </div>
     <span class="badge" id="loginBadge">未ログイン</span>
   </header>
@@ -114,13 +114,13 @@
   <!-- ログイン -->
   <div class="card" id="loginCard">
     <h3>① Microsoft ログイン (Dataverse)</h3>
-    <p class="kv">既存の LEENAI-ShippingSchedule アプリ（Client ID: f071a165...）を再利用します。<br>
+    <p class="kv">COMPASS会計専用アプリ「LEENAI-COMPASS-Accounting」（Client ID: 48819428...）を使用します。<br>
     このツールは <b>GitHub Pages にデプロイした URL</b> でのみ動作します（Redirect URI 登録が必要）。</p>
     <button class="btn btn-primary" id="btnLogin" onclick="startLogin()">🔑 ログイン</button>
     <div class="alert warn" id="redirectWarning">
       ⚠️ 現在の REDIRECT_URI は <code id="redirectUriShow"></code> です。<br>
-      Azure Portal → LEENAI-ShippingSchedule → 認証 に、この URL が SPA Redirect URI として登録されていない場合、
-      ログイン後に <b>AADSTS50011</b> エラーが出ます。mh_lee@ に登録を依頼してください。
+      Azure Portal → LEENAI-COMPASS-Accounting → 認証 に、この URL が SPA Redirect URI として登録されていない場合、
+      ログイン後に <b>AADSTS50011</b> エラーが出ます。
     </div>
   </div>
 
@@ -173,7 +173,7 @@
 // ═══════════════════════════════════════════════
 // 定数
 // ═══════════════════════════════════════════════
-const CLIENT_ID    = 'f071a165-5e9b-44bf-b6a1-baba654524db';
+const CLIENT_ID    = '48819428-ab0a-4991-8039-e9a4d8f2f011'; // LEENAI-COMPASS-Accounting (専用アプリ, 2026-07-16 新規登録)
 const TENANT_ID    = 'a56988ff-c2b8-4df8-9727-889ad4205198';
 const REDIRECT_URI = location.origin + location.pathname; // ⚠️ ハードコード原則: デプロイ後は固定URLになる
 
@@ -573,3 +573,4 @@ function renderOneBooking(b, extra){
 </script>
 </body>
 </html>
+
