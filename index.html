@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>LEENAI COMPASS Dataverse 検証ツール v2.4</title>
+<title>LEENAI COMPASS Dataverse 検証ツール v2.5</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{
@@ -106,7 +106,7 @@
   <header>
     <div class="title-block">
       <div class="title">🔍 COMPASS Dataverse 検証ツール</div>
-      <div class="version">v2.4 (2026-07-16) — 銀行名は個別取得に変更(FormattedValueは内部連番を返す不具合) / $filter追加</div>
+      <div class="version">v2.5 (2026-07-16) — 銀行名表示を銀行名のみに変更(支店名を非表示)</div>
     </div>
     <span class="badge" id="loginBadge">未ログイン</span>
   </header>
@@ -529,7 +529,7 @@ function renderOneBooking(b, extra){
         <div class="label">売上 <span class="tag tag-stored">保存値</span></div>
         <div class="calc-line">銀行名: ${
           extra.bankError ? `<span style="color:var(--err)">⚠️ ${extra.bankError}</span>` :
-          extra.bank ? fmtVal(extra.bank.crcf9_bank_name) + (extra.bank.crcf9_branch_name ? ' '+fmtVal(extra.bank.crcf9_branch_name) : '') :
+          extra.bank ? fmtVal(extra.bank.crcf9_bank_name) :
           lookupGuid(b, '_crcf9_bank_id_value') ? '<span class="fill-null">(未取得)</span>' : fmtVal(null)
         }</div>
         <div class="calc-line">銀行提出日: ${fmtDate(b.crcf9_bank_submisson_date)}</div>
@@ -616,4 +616,3 @@ function renderOneBooking(b, extra){
 </script>
 </body>
 </html>
-
