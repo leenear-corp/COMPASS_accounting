@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>LEENAI COMPASS Dataverse 検証ツール v2.2</title>
+<title>LEENAI COMPASS Dataverse 検証ツール v2.3</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{
@@ -106,7 +106,7 @@
   <header>
     <div class="title-block">
       <div class="title">🔍 COMPASS Dataverse 検証ツール</div>
-      <div class="version">v2.2 (2026-07-16) — カスタムlookupの_idname不可バグ修正(_value+FormattedValue方式に変更)</div>
+      <div class="version">v2.3 (2026-07-16) — 全lookup(標準含む)を_value+FormattedValue方式に統一(modifiedbyname修正)</div>
     </div>
     <span class="badge" id="loginBadge">未ログイン</span>
   </header>
@@ -197,7 +197,7 @@ const BOOKING_SELECT = [
   'crcf9_maritime_freight_payment_date',
   // 海上保険料タブ
   'crcf9_insurance_premiums','crcf9_bl_insurance_exchange_rate','crcf9_icc','crcf9_insurance_fee_updated',
-  'modifiedon','modifiedbyname',
+  'modifiedon','_modifiedby_value',
 ];
 
 let accessToken = null;
@@ -332,7 +332,10 @@ function fmtDate(v){
 }
 
 // カスタムlookupは _fieldname_value でGUIDを取得し、表示名は付随するFormattedValueアノテーションから読む
-// （owner/createdby/modifiedby等の標準lookupと違い、カスタムlookupには "xxx_idname" 列は存在しない）
+// カスタムlookupも標準システムlookup(owner/createdby/modifiedby等)も例外なく、
+// $selectでは "_fieldname_value" (GUID) のみ取得可能。"xxx_idname"/"xxxname" のような
+// 名前列は実際のWeb APIには存在しない（Excelエクスポート時にアノテーションを列として展開した見た目にすぎない）。
+// 表示名は必ず _fieldname_value@OData.Community.Display.V1.FormattedValue アノテーションから読む。
 function lookupGuid(record, valueField){
   return record[valueField] || null;
 }
@@ -493,7 +496,7 @@ function renderOneBooking(b, extra){
         <span class="inv">${fmtVal(b.cr49f_invoice_no)}</span>
         <span class="bkg">BKG: ${fmtVal(b.cr49f_booking_no)} | コンテナ数: ${cntr}本</span>
       </div>
-      <div class="kv">更新: ${fmtDate(b.modifiedon)} (${fmtVal(b.modifiedbyname)})</div>
+      <div class="kv">更新: ${fmtDate(b.modifiedon)} (${fmtVal(lookupName(b, '_modifiedby_value'))})</div>
     </div>
 
     <div class="calc-grid">
