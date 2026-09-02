@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.158 (2026-09-02)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.159 (2026-09-02)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.158 (2026-09-02) ｜ フリー検索(部分一致)の大文字小文字無視に拡張</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.159 (2026-09-02) ｜ render/export フィルタ重複ロジックの共通化リファクタリング</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3620,6 +3620,36 @@
        v2.2.157 baseline과 완전히 일치(마크업 변경 없음, 기존 비교식 16곳을
        `partialMatch()` 호출로 교체만). `✦ Powered by LEENAI Automation System` 문구
        실사용 위치 전부 변경 없음 유지 확인.
+   v2.2.159 (2026-09-02) : ♻️ render/export 필터 로직 중복 리팩터링(§6 기존 과제 처리)
+     (배경 — §6 "리팩터링 검토(선택, 기존 과제): render/export 필터 로직 중복을 공용
+     함수로 묶는 작업". 이 중복 구조는 실제로 v2.2.154/155에서 render에만 신규 필터를
+     추가하고 export에는 반영을 빠뜨리는 버그를 2회 유발한 바 있어(支払日(個別)/作業日
+     (個別)/ATD(個別) 각 필드), 근본 원인을 제거하는 작업)
+     - **핵심 변경**: Commission/仕入/運送料/通関/海上運賃 5탭의 `render*Table()`과
+       `export*Excel()`이 각자 필터 조건식을 그대로 복붙해 중복 구현하던 것을 제거하고,
+       이미 카스케이드 필터용으로 존재하던 `{tab}MatchesExcept(x, exceptDim)` 함수를
+       `{tab}MatchesExcept(x, null)`(모든 조건 적용)로 호출하는 방식으로 통일. 売上탭이
+       이미 `bookingMatchesExcept(b, null)`로 render/export 양쪽에서 공용 호출하고
+       있던 기존 패턴(v2.2.134~138)을 나머지 5탭에도 동일하게 맞춘 것 — 신규 로직
+       추가 없음, 기존 필터 조건을 그대로 함수 호출로 대체만 함.
+     - **通関/海上運賃 dedup 중복도 함께 제거**: 두 탭이 각각 render/export에 중복
+       구현하고 있던 "Invoice No.+Booking No. 조합 중복행 제거"(v2.2.41/42, 96) 로직을
+       공용 함수 `dedupByInvoiceBooking(rows)`(신규, §5999 부근 partialMatch 옆에 위치)로
+       통합. 반환값 `{ rows, removedCount }` — 기존 集計바의 重複除去 건수 표시는
+       `removedCount`로 그대로 유지.
+     - **효과**: 필터 필드를 앞으로 추가/수정할 때 `{tab}MatchesExcept()` 1곳만 고치면
+       render/export 양쪽에 자동으로 반영되어, v2.2.154/155와 같은 종류의 반영 누락
+       버그가 구조적으로 재발할 수 없게 됨. §5 필터 로직 중복 구현 주의 규칙은 이번
+       리팩터링으로 해당 5탭 + 通関/海上運賃 dedup에 대해서는 더 이상 적용 대상이 아님
+       (§5 갱신은 아래 참고).
+     - **검증 범위 밖(변경 없음)**: 각 탭의 실제 필터 조건(어떤 필드를 어떻게 비교하는지)
+       자체는 1비트도 바뀌지 않음 — 기존 중복 코드 두 곳을 나란히 놓고 완전히 동일함을
+       확인한 뒤 공용 함수 호출로 교체만 했음. 화면 표시/Excel出力 결과·컬럼·헤더·정렬·
+       ブランディング 문구는 전부 기존과 동일.
+     - **문법/전체 검토**: `node --check`로 JS 문법 오류 없음 확인. HTML 태그 짝
+       v2.2.158 baseline과 완전히 일치(마크업 변경 없음, `<script>` 내부 JS 로직만
+       교체). `✦ Powered by LEENAI Automation System` 문구 실사용 위치(화면 4곳 +
+       Excel/PDF 출력 코드 2곳) 전부 변경 없음 유지 확인.
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -6010,6 +6040,23 @@ function matchDateField(value, from, to, emptyOnly){
   return inRange(value, from, to);
 }
 
+// v2.2.159 신규(리팩터링): 通関/海上運賃 탭이 render*Table()과 export*Excel() 양쪽에 동일하게
+// 중복 구현하고 있던 "Invoice No.+Booking No. 조합 중복행 제거"(v2.2.41/42 通関, v2.2.96 海上運賃)
+// 로직을 공용 함수로 통합. 로직 자체는 기존과 완전히 동일(String()+trim() 방어적 캐스팅 포함) —
+// 표시 순서(집합 순서)에 영향 없도록 filter는 최초 등장 순서를 유지함. dedupRemovedCount(集計바
+// 표시용)가 필요하므로 { rows, removedCount } 형태로 반환.
+function dedupByInvoiceBooking(rows){
+  const before = rows.length;
+  const seen = new Set();
+  const deduped = rows.filter(r=>{
+    const key = String(r.invoiceNo||'').trim() + '\u0000' + String(r.bookingNo||'').trim();
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { rows: deduped, removedCount: before - deduped.length };
+}
+
 // v2.2.66 신규: "미입력만 추출" 체크박스 1개를 공통 로직으로 연결한다.
 // - 체크 시: 연결된 filterState의 emptyKey를 true로 세팅, From/To 입력값을 비우고 비활성화
 //   (기간검색과 미입력검색은 동시에 의미가 없으므로 시각적으로 명확히 분리).
@@ -7481,18 +7528,7 @@ function initCommissionTab(){
 }
 
 function renderCommissionTable(){
-  const f = commissionFilter;
-  let rows = bookings.filter(b=>{
-    if(f.buyer && b.buyer !== f.buyer) return false;
-    if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
-    if(f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false;
-    if(f.agent.selected.length && !f.agent.selected.includes(b.agent)) return false;
-    if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
-    if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.saleCO, f.freeText))) return false;
-    if(!matchDateField(b.agentPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-    if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false; // v2.2.146 신규
-    return true;
-  });
+  let rows = bookings.filter(b=>commissionMatchesExcept(b, null)); // v2.2.159 리팩터링: render/export 중복 필터식을 commissionMatchesExcept() 공용 호출로 통합(売上탭과 동일 패턴)
   rows = applySorting(rows, 'commission'); // v2.2.76 신규
 
   const totalWeight  = rows.reduce((s,b)=>s+(b.weight||0),0);
@@ -7547,18 +7583,7 @@ function renderCommissionTable(){
 
 async function exportCommissionExcel(){ // v2.2.138 신규
   await runExcelExport('btn-cm-excel', ()=>{
-    const f = commissionFilter;
-    let rows = bookings.filter(b=>{
-      if(f.buyer && b.buyer !== f.buyer) return false;
-      if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
-      if(f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false;
-      if(f.agent.selected.length && !f.agent.selected.includes(b.agent)) return false;
-      if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
-      if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.saleCO, f.freeText))) return false;
-      if(!matchDateField(b.agentPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false; // v2.2.154 수정: renderCommissionTable()과 동일한 支払日(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
-      return true;
-    });
+    let rows = bookings.filter(b=>commissionMatchesExcept(b, null)); // v2.2.159 리팩터링: renderCommissionTable()과 동일한 commissionMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.154에서 발생했던 필드 누락 버그 재발 원천 차단)
     rows = applySorting(rows, 'commission');
     const header = ['Agent','販売先','販売CO','ATD','Invoice No.','Commission','重量','Ex.','S.cms$','S.cms¥','支払日','更新日時','更新者'];
     const data = rows.map(b=>[
@@ -7971,23 +7996,7 @@ function initPurchaseTab(){
 }
 
 function renderPurchaseTable(){
-  const f = purchaseFilter;
-  let rows = purchaseContainers.filter(c=>{
-    if(f.buyer && c.buyer !== f.buyer) return false;
-    if(f.purchaseId && String(c.purchaseId) !== f.purchaseId) return false;
-    if(f.purchaseContractNo.selected.length && !f.purchaseContractNo.selected.includes(c.purchaseContractNo)) return false;
-    if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
-    if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
-    if(f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
-    if(f.packer && !partialMatch(c.packer, f.packer)) return false; // v2.2.107: 完全一致(複数選択)→部分一致(候補表示型) / v2.2.157: 대소문자 무시 비교로 수정
-    if(f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
-    if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
-    if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
-    if(!matchDateField(c.paymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-    if(f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false; // v2.2.146 신규
-    if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.paymentDate)) return false; // v2.2.146 신규
-    return true;
-  });
+  let rows = purchaseContainers.filter(c=>purchaseMatchesExcept(c, null)); // v2.2.159 리팩터링: render/export 중복 필터식을 purchaseMatchesExcept() 공용 호출로 통합
   rows = applySorting(rows, 'purchase'); // v2.2.76 신규
 
   const totalWeight = rows.reduce((s,c)=>s+(c.netWeightMt||0),0);
@@ -8040,23 +8049,7 @@ function renderPurchaseTable(){
 
 async function exportPurchaseExcel(){ // v2.2.138 신규
   await runExcelExport('btn-pc-excel', ()=>{
-    const f = purchaseFilter;
-    let rows = purchaseContainers.filter(c=>{
-      if(f.buyer && c.buyer !== f.buyer) return false;
-      if(f.purchaseId && String(c.purchaseId) !== f.purchaseId) return false;
-      if(f.purchaseContractNo.selected.length && !f.purchaseContractNo.selected.includes(c.purchaseContractNo)) return false;
-      if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
-      if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
-      if(f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
-      if(f.packer && !partialMatch(c.packer, f.packer)) return false; // v2.2.157: 대소문자 무시 비교로 수정
-      if(f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
-      if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
-      if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
-      if(!matchDateField(c.paymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-      if(f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false; // v2.2.155 수정: renderPurchaseTable()과 동일한 作業日(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
-      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.paymentDate)) return false; // v2.2.155 수정: 支払日(個別) 필터도 동일하게 추가
-      return true;
-    });
+    let rows = purchaseContainers.filter(c=>purchaseMatchesExcept(c, null)); // v2.2.159 리팩터링: renderPurchaseTable()과 동일한 purchaseMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.155에서 발생했던 필드 누락 버그 재발 원천 차단)
     rows = applySorting(rows, 'purchase');
     const header = ['購買元','購買契約番号','ATD','Invoice No.','Booking No.','作業日','販売先','Container No.','購買ID','B.unit ¥/KG','重量','仕入','支払日','更新日時','更新者'];
     const data = rows.map(c=>[
@@ -8455,21 +8448,7 @@ function initDrayTab(){
 }
 
 function renderDrayTable(){
-  const f = drayFilter;
-  let rows = purchaseContainers.filter(c=>{
-    if(f.plant && c.drayPlant !== f.plant) return false;
-    if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
-    if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
-    if(f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
-    if(f.vendor && c.drayVendor !== f.vendor) return false; // v2.2.108: 複数選択(완전일치 OR)→単一選択(완전일치)로 변경
-    if(f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
-    if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
-    if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
-    if(!matchDateField(c.drayPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-    if(f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false; // v2.2.146 신규
-    if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.drayPaymentDate)) return false; // v2.2.146 신규
-    return true;
-  });
+  let rows = purchaseContainers.filter(c=>drayMatchesExcept(c, null)); // v2.2.159 리팩터링: render/export 중복 필터식을 drayMatchesExcept() 공용 호출로 통합
   rows = applySorting(rows, 'dray'); // v2.2.76 신규
 
   const totalWeight = rows.reduce((s,c)=>s+(c.netWeightMt||0),0);
@@ -8523,21 +8502,7 @@ function renderDrayTable(){
 
 async function exportDrayExcel(){ // v2.2.138 신규
   await runExcelExport('btn-dr-excel', ()=>{
-    const f = drayFilter;
-    let rows = purchaseContainers.filter(c=>{
-      if(f.plant && c.drayPlant !== f.plant) return false;
-      if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
-      if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
-      if(f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
-      if(f.vendor && c.drayVendor !== f.vendor) return false;
-      if(f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
-      if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
-      if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
-      if(!matchDateField(c.drayPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-      if(f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false; // v2.2.155 수정: renderDrayTable()과 동일한 作業日(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
-      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.drayPaymentDate)) return false; // v2.2.155 수정: 支払日(個別) 필터도 동일하게 추가
-      return true;
-    });
+    let rows = purchaseContainers.filter(c=>drayMatchesExcept(c, null)); // v2.2.159 리팩터링: renderDrayTable()과 동일한 drayMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.155에서 발생했던 필드 누락 버그 재발 원천 차단)
     rows = applySorting(rows, 'dray');
     const header = ['ATD','Invoice No.','Booking No.','運送業者','営業所','作業日','Container No.','重量','費用','高速代','支払日','B/L No.','更新日時','更新者'];
     const data = rows.map(c=>[
@@ -8900,18 +8865,7 @@ function initCustomsTab(){
 }
 
 function renderCustomsTable(){
-  const f = customsFilter;
-  let rows = bookings.filter(b=>{
-    if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
-    if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
-    if(f.forwarder && b.forwarder !== f.forwarder) return false; // v2.2.109: 複数選択(완전일치 OR)→単一選択(완전일치)로 변경
-    if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
-    if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
-    if(!matchDateField(b.customPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-    if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.146 신규
-    if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.customPaymentDate)) return false; // v2.2.146 신규
-    return true;
-  });
+  let rows = bookings.filter(b=>customsMatchesExcept(b, null)); // v2.2.159 리팩터링: render/export 중복 필터식을 customsMatchesExcept() 공용 호출로 통합
 
   // v2.2.96: 사용자 지적 반영 — 通関は売上/Commissionタブと違い購買元別に行を分けず、Invoice(=Booking)
   // 1件当たり1行のはず(通関は乙仲/通関料/手数料/支払日すべてbooking레벨 조인(§3-5 _cr49f_fowarder_id_value
@@ -8921,15 +8875,10 @@ function renderCustomsTable(){
   // 이유로, Invoice No.+Booking No. 조합이 같은 행은 첫 번째만 남기고 제거한다(集計바 중복 카운트로
   // 인한 이중 합산 오류도 함께 해소됨). PATCH 로직(saveCustomsPayDate)은 _liveRecordId 기준으로 동일
   // booking을 공유하는 그룹행 전체에 로컬 반영하므로 이 dedup(표시 전용)과는 무관하게 계속 정상 동작함.
-  const beforeDedupCount = rows.length;
-  const seenInvBkg = new Set();
-  rows = rows.filter(b=>{
-    const key = String(b.invoiceNo||'').trim() + '\u0000' + String(b.bookingNo||'').trim();
-    if(seenInvBkg.has(key)) return false;
-    seenInvBkg.add(key);
-    return true;
-  });
-  const dedupRemovedCount = beforeDedupCount - rows.length;
+  // v2.2.159 리팩터링: dedup 로직을 dedupByInvoiceBooking() 공용 함수 호출로 통합(render/export 동일 로직 중복 제거).
+  const dedupResult = dedupByInvoiceBooking(rows);
+  rows = dedupResult.rows;
+  const dedupRemovedCount = dedupResult.removedCount;
   rows = applySorting(rows, 'customs'); // v2.2.76 신규 — dedup 이후 최종 표시 순서에 정렬 적용
 
   // v2.2.151 수정(海上運賃 v2.2.150과 동일 패턴 버그) — 기존 계산식은 forwarderCostTax(手数料)가
@@ -8986,25 +8935,8 @@ function renderCustomsTable(){
 
 async function exportCustomsExcel(){ // v2.2.138 신규
   await runExcelExport('btn-cu-excel', ()=>{
-    const f = customsFilter;
-    let rows = bookings.filter(b=>{
-      if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
-      if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
-      if(f.forwarder && b.forwarder !== f.forwarder) return false;
-      if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
-      if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
-      if(!matchDateField(b.customPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-      if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.155 수정: renderCustomsTable()과 동일한 ATD(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
-      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.customPaymentDate)) return false; // v2.2.155 수정: 支払日(個別) 필터도 동일하게 추가
-      return true;
-    });
-    const seenInvBkg = new Set();
-    rows = rows.filter(b=>{
-      const key = String(b.invoiceNo||'').trim() + '\u0000' + String(b.bookingNo||'').trim();
-      if(seenInvBkg.has(key)) return false;
-      seenInvBkg.add(key);
-      return true;
-    });
+    let rows = bookings.filter(b=>customsMatchesExcept(b, null)); // v2.2.159 리팩터링: renderCustomsTable()과 동일한 customsMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.155에서 발생했던 필드 누락 버그 재발 원천 차단)
+    rows = dedupByInvoiceBooking(rows).rows; // v2.2.159 리팩터링: dedup도 공용 함수로 통합
     rows = applySorting(rows, 'customs');
     const header = ['ATD','Invoice No.','Booking No.','乙仲','通関料','手数料(税抜)','手数料(税込)','費用(税抜)','費用(税込)','支払日','更新日時','更新者'];
     const data = rows.map(b=>[
@@ -9405,21 +9337,7 @@ function initMaritimeTab(){
 }
 
 function renderMaritimeTable(){
-  const f = maritimeFilter;
-  let rows = bookings.filter(b=>{
-    if(f.pol && b.pol !== f.pol) return false;
-    if(f.pod && b.pod !== f.pod) return false;
-    if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
-    if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
-    if(f.blNumber.selected.length && !f.blNumber.selected.includes(b.blNumber)) return false;
-    if(f.carrier && !partialMatch(b.carrier, f.carrier)) return false; // v2.2.105: 複数選択(OR)→部分一致 単一입력으로 변경 / v2.2.157: 대소문자 무시 비교로 수정
-    if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
-    if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
-    if(!matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-    if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.146 신규
-    if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.maritimePaymentDate)) return false; // v2.2.146 신규
-    return true;
-  });
+  let rows = bookings.filter(b=>maritimeMatchesExcept(b, null)); // v2.2.159 리팩터링: render/export 중복 필터식을 maritimeMatchesExcept() 공용 호출로 통합
 
   // v2.2.41: 사용자 지시 반영 — 海上運賃는 売上/Commissionタブと違い購買元別に行을 나누지 않고
   // Invoice(=Booking) 1건당 1행이어야 함(사용자 확인: "해상운임은 인보이스 한 건당 하나의 행이예요").
@@ -9429,15 +9347,11 @@ function renderMaritimeTable(){
   // (集計바 重複 카운트로 인한 이중 합산 오류도 이 dedup으로 함께 해소됨.)
   // v2.2.42: 사용자 재확인 결과("여전히 두줄 이상 보입니다") 대비 — 전후 공백/String↔null 캐스팅 차이로
   // 키가 미스매치될 가능성을 배제하기 위해 String()+trim()을 방어적으로 추가(로직 자체는 v2.2.41과 동일).
-  const beforeDedupCount = rows.length;
-  const seenInvBkg = new Set();
-  rows = rows.filter(b=>{
-    const key = String(b.invoiceNo||'').trim() + '\u0000' + String(b.bookingNo||'').trim();
-    if(seenInvBkg.has(key)) return false;
-    seenInvBkg.add(key);
-    return true;
-  });
-  const dedupRemovedCount = beforeDedupCount - rows.length; // v2.2.42: 集計바에 노출해 dedup 동작 여부를 눈으로 바로 확인 가능하게 함
+  // v2.2.159 리팩터링: dedup 로직을 dedupByInvoiceBooking() 공용 함수 호출로 통합(通関과 동일 패턴,
+  // render/export 동일 로직 중복 제거).
+  const dedupResult = dedupByInvoiceBooking(rows);
+  rows = dedupResult.rows;
+  const dedupRemovedCount = dedupResult.removedCount; // v2.2.42: 集計바에 노출해 dedup 동작 여부를 눈으로 바로 확인 가능하게 함
   rows = applySorting(rows, 'maritime'); // v2.2.76 신규 — dedup 이후 최종 표시 순서에 정렬 적용
 
   // v2.2.39: 非課税合計는 항상 base금액(運賃JPY+Seal+bl_etc), 課税合計(税込)는
@@ -9508,28 +9422,8 @@ function renderMaritimeTable(){
 
 async function exportMaritimeExcel(){ // v2.2.138 신규
   await runExcelExport('btn-mt-excel', ()=>{
-    const f = maritimeFilter;
-    let rows = bookings.filter(b=>{
-      if(f.pol && b.pol !== f.pol) return false;
-      if(f.pod && b.pod !== f.pod) return false;
-      if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
-      if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
-      if(f.blNumber.selected.length && !f.blNumber.selected.includes(b.blNumber)) return false;
-      if(f.carrier && !partialMatch(b.carrier, f.carrier)) return false; // v2.2.157: 대소문자 무시 비교로 수정
-      if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
-      if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
-      if(!matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
-      if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.155 수정: renderMaritimeTable()과 동일한 ATD(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
-      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.maritimePaymentDate)) return false; // v2.2.155 수정: 支払日(個別) 필터도 동일하게 추가
-      return true;
-    });
-    const seenInvBkg = new Set();
-    rows = rows.filter(b=>{
-      const key = String(b.invoiceNo||'').trim() + '\u0000' + String(b.bookingNo||'').trim();
-      if(seenInvBkg.has(key)) return false;
-      seenInvBkg.add(key);
-      return true;
-    });
+    let rows = bookings.filter(b=>maritimeMatchesExcept(b, null)); // v2.2.159 리팩터링: renderMaritimeTable()과 동일한 maritimeMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.155에서 발생했던 필드 누락 버그 재발 원천 차단)
+    rows = dedupByInvoiceBooking(rows).rows; // v2.2.159 리팩터링: dedup도 공용 함수로 통합
     rows = applySorting(rows, 'maritime');
     const header = ['ATD','Invoice No.','Booking No.','B/L No.','POL','POD','船社','本数','bl_rate','運賃USD','運賃JPY',
       'Doc(税抜)','Doc(税込)','Seal','bl_etc','bl_etc(税抜)','bl_etc(税込)','Total(税抜)','Total(税込)','支払日','更新日時','更新者'];
