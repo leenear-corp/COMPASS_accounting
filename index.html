@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI COMPASS accounting UI v2.2.152 (ブラウザタブアイコン追加)</title>
+<title>COMPASS accounting-LEENAI</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjNGY4ZWY3Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjN2M1Y2Y3Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9InVybCgjZykiLz48dGV4dCB4PSIzMiIgeT0iNDMiIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjMyIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjZmZmZmZmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7inKY8L3RleHQ+PC9zdmc+Cg==">
 <style>
   :root{
@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.152 (2026-09-02)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.153 (2026-09-02)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.152 (2026-09-02) ｜ ブラウザタブアイコン追加</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.153 (2026-09-02) ｜ ブラウザタブ名変更</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3434,6 +3434,22 @@
      - **범위 밖(변경 없음)**: 그 외 헤더 마크업·로고뱃지·CSS 변수·JS 로직은 전혀 손대지 않음.
      - **문법/전체 검토**: 수정 후 `node --check`로 JS 문법 오류 없음 확인(JS 미변경), HTML 태그
        짝은 `<link>`(self-closing 취급) 1개 추가만 있고 그 외 v2.2.151 baseline과 완전히 일치.
+   v2.2.153 (2026-09-02) : ✏️ 브라우저 탭 이름 변경 (사용자 요청)
+     (배경 — 사용자 요청: "아이콘 옆의 이름도 COMPASS accounting-LEENAI로 바꿔주세요." v2.2.152에서
+     favicon을 추가했으나, 탭에 표시되는 이름(`<title>`)은 여전히 내부 버전관리용 문구
+     "LEENAI COMPASS accounting UI v2.2.xxx (...)"였음.)
+     - **수정 내용**: `<title>` 태그 텍스트를 `COMPASS accounting-LEENAI`로 교체(브라우저 탭에만
+       노출, 화면 상단 헤더의 `.title`(“COMPASS accounting” 표시)·로고뱃지(“LEENAI”)와는 별개
+       요소라 화면 UI는 변경 없음).
+     - **⚠ 공통 규칙 예외 처리**: 기존 §6 규칙은 "`<title>`·version-pill·splash-ver 3곳 모두
+       버전번호를 함께 갱신"이었으나, 이번 사용자 요청으로 `<title>`은 브라우저 탭 표시용
+       고정 문구로 바뀌어 더 이상 버전번호를 담지 않게 됨. 버전 추적은 `splash-ver`·
+       `version-pill`(화면 내 실제 노출)과 이 변경이력 주석으로 계속 유지되므로 버전관리
+       공백은 없음 — 향후 버전업 시 `<title>`은 그대로 두고 `splash-ver`/`version-pill`
+       2곳만 갱신하면 됨(§6 규칙 갱신).
+     - **범위 밖(변경 없음)**: favicon(v2.2.152)·헤더 마크업·CSS·JS 로직 전혀 손대지 않음.
+     - **문법/전체 검토**: 수정 후 `node --check`로 JS 문법 오류 없음 확인(JS 미변경), HTML
+       태그 짝 v2.2.152 baseline과 완전히 일치(텍스트 노드만 변경, 태그 구조 동일).
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
