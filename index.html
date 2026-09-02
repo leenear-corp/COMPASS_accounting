@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.153 (2026-09-02)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.155 (2026-09-02)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.153 (2026-09-02) ｜ ブラウザタブ名変更</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.155 (2026-09-02) ｜ 4タブExcel出力の日付フィルタ漏れ修正</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3450,6 +3450,66 @@
      - **범위 밖(변경 없음)**: favicon(v2.2.152)·헤더 마크업·CSS·JS 로직 전혀 손대지 않음.
      - **문법/전체 검토**: 수정 후 `node --check`로 JS 문법 오류 없음 확인(JS 미변경), HTML
        태그 짝 v2.2.152 baseline과 완전히 일치(텍스트 노드만 변경, 태그 구조 동일).
+   v2.2.154 (2026-09-02) : 🐛 Commission Excel出力の支払日(個別)フィルタ漏れ修正 (사용자 지적)
+     (배경 — 사용자 지적: "Commission탭에서 검색조건을 넣고 엑셀을 내보냈는데 결과가 틀려요."
+     화면에서 Agent=FOUR SEASONS + 支払日(個別)=2026-08-31로 필터해 23건이 표시됐는데, 같은
+     조건으로 Excel出力한 결과는 41건이 나옴(첨부 xlsx 확인).)
+     - **원인**: v2.2.146에서 支払日(個別) 복수선택(OR) 필터(`paymentDateMulti`)를 신규 추가할
+       때 `renderCommissionTable()`의 필터 조건에는 반영됐지만(7257행), 같은 필터를 그대로
+       재사용해야 하는 `exportCommissionExcel()`(7312행)에는 이 조건이 누락된 채로 남아있었음
+       — 화면에는 支払日(個別) 필터가 적용된 23건만 보이는데, Excel出力은 그 필터를 무시하고
+       Agent 등 나머지 조건만 적용한 41건(支払日이 비어있거나 다른 값인 행 포함)을 그대로
+       내보내던 상태.
+     - **수정 내용**: `exportCommissionExcel()` 필터 조건에
+       `renderCommissionTable()`과 동일한 1줄 추가.
+       ```js
+       if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false;
+       ```
+     - **⚠ 동일 패턴 추가 발견**: v2.2.146에서 같은 방식으로 개별날짜 복수선택 필터가 추가된
+       나머지 4개 탭(仕入 `workDateMulti`/`paymentDateMulti`, 運送料 `workDateMulti`/
+       `paymentDateMulti`, 通関 `atdMulti`/`paymentDateMulti`, 海上運賃 `atdMulti`/
+       `paymentDateMulti`)의 Excel出力 함수(`exportPurchaseExcel`/`exportDrayExcel`/
+       `exportCustomsExcel`/`exportMaritimeExcel`)에도 완전히 동일한 필터 누락이 확인됨 —
+       이번 세션 요청 범위(Commission 한정)를 벗어나 이번에는 손대지 않음. 사용자 확인 후
+       별도로 수정 필요(§6 참조).
+     - **범위 밖(변경 없음)**: `runExcelExport` 공용 함수·헤더/데이터 매핑·다른 필터 조건·화면
+       표시 로직(`renderCommissionTable`)은 전혀 손대지 않음(이미 정상 동작 중이었음).
+     - **문법/전체 검토**: 수정 후 `node --check`로 JS 문법 오류 없음 확인, HTML 태그 짝
+       v2.2.153 baseline과 완전히 일치(마크업 변경 없음, JS 필터 조건 1줄만 추가).
+   v2.2.155 (2026-09-02) : 🐛 仕入/運送料/通関/海上運賃 4탭 Excel出力 개별날짜필터 누락 수정
+     (사용자 승인, v2.2.154 후속)
+     (배경 — v2.2.154에서 Commission탭 수정 중 나머지 4개 탭에도 완전히 동일한 패턴의 버그가
+     있음을 발견해 §범위 밖으로 남겨두었었음. 사용자가 "네, 같이 고쳐주세요"로 승인.)
+     - **원인**: v2.2.146에서 개별날짜 복수선택(OR) 필터를 4개 탭에 추가할 때, 각 탭의
+       `render*Table()` 필터 조건에는 반영됐지만 같은 필터를 그대로 재사용해야 하는
+       `export*Excel()` 함수에는 누락된 채로 남아있었음 — Commission탭(v2.2.154)과 완전히
+       동일한 구조의 버그.
+     - **수정 내용**: 각 탭 `export*Excel()` 필터 조건에 해당 `render*Table()`과 동일한 필터
+       1~2줄씩 추가(그 외 필터 조건·헤더/데이터 매핑·dedup 로직은 전혀 변경 없음).
+       ```js
+       // 仕入 exportPurchaseExcel()
+       if(f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false;
+       if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.paymentDate)) return false;
+
+       // 運送料 exportDrayExcel()
+       if(f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false;
+       if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.drayPaymentDate)) return false;
+
+       // 通関 exportCustomsExcel()
+       if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
+       if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.customPaymentDate)) return false;
+
+       // 海上運賃 exportMaritimeExcel()
+       if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
+       if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.maritimePaymentDate)) return false;
+       ```
+     - **결과**: v2.2.146에서 개별날짜 복수선택 필터가 추가된 5개 탭(Commission·仕入·運送料·
+       通関·海上運賃) 전부 화면 표시와 Excel出力의 필터 조건이 완전히 일치하게 됨. 売上탭은
+       원래 이 필터 기능 자체가 없어 대상 아님(변경 없음).
+     - **범위 밖(변경 없음)**: `runExcelExport` 공용 함수·헤더/데이터 매핑·다른 필터 조건·
+       각 탭 화면 표시 로직(`render*Table`)은 전혀 손대지 않음(이미 정상 동작 중이었음).
+     - **문법/전체 검토**: 수정 후 `node --check`로 JS 문법 오류 없음 확인, HTML 태그 짝
+       v2.2.154 baseline과 완전히 일치(마크업 변경 없음, JS 필터 조건 총 8줄만 추가).
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -7320,6 +7380,7 @@ async function exportCommissionExcel(){ // v2.2.138 신규
       if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
       if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.saleCO.includes(f.freeText))) return false;
       if(!matchDateField(b.agentPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false; // v2.2.154 수정: renderCommissionTable()과 동일한 支払日(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
       return true;
     });
     rows = applySorting(rows, 'commission');
@@ -7750,6 +7811,8 @@ async function exportPurchaseExcel(){ // v2.2.138 신규
       if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
       if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
       if(!matchDateField(c.paymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+      if(f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false; // v2.2.155 수정: renderPurchaseTable()과 동일한 作業日(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
+      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.paymentDate)) return false; // v2.2.155 수정: 支払日(個別) 필터도 동일하게 추가
       return true;
     });
     rows = applySorting(rows, 'purchase');
@@ -8169,6 +8232,8 @@ async function exportDrayExcel(){ // v2.2.138 신규
       if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
       if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
       if(!matchDateField(c.drayPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+      if(f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false; // v2.2.155 수정: renderDrayTable()과 동일한 作業日(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
+      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.drayPaymentDate)) return false; // v2.2.155 수정: 支払日(個別) 필터도 동일하게 추가
       return true;
     });
     rows = applySorting(rows, 'dray');
@@ -8578,6 +8643,8 @@ async function exportCustomsExcel(){ // v2.2.138 신규
       if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
       if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
       if(!matchDateField(b.customPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+      if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.155 수정: renderCustomsTable()과 동일한 ATD(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
+      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.customPaymentDate)) return false; // v2.2.155 수정: 支払日(個別) 필터도 동일하게 추가
       return true;
     });
     const seenInvBkg = new Set();
@@ -9036,6 +9103,8 @@ async function exportMaritimeExcel(){ // v2.2.138 신규
       if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
       if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
       if(!matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+      if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.155 수정: renderMaritimeTable()과 동일한 ATD(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
+      if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.maritimePaymentDate)) return false; // v2.2.155 수정: 支払日(個別) 필터도 동일하게 추가
       return true;
     });
     const seenInvBkg = new Set();
