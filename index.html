@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.155 (2026-09-02)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.156 (2026-09-02)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.155 (2026-09-02) ｜ 4タブExcel出力の日付フィルタ漏れ修正</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.156 (2026-09-02) ｜ 5タブに検索条件カスケードフィルタ追加</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3510,6 +3510,61 @@
        각 탭 화면 표시 로직(`render*Table`)은 전혀 손대지 않음(이미 정상 동작 중이었음).
      - **문법/전체 검토**: 수정 후 `node --check`로 JS 문법 오류 없음 확인, HTML 태그 짝
        v2.2.154 baseline과 완전히 일치(마크업 변경 없음, JS 필터 조건 총 8줄만 추가).
+   v2.2.156 (2026-09-02) : ✨ Commission/仕入/運送料/通関/海上運賃 5탭에 検索条件カスケード
+     (連動)フィルタ 신규 적용
+     (사용자 요청 — 海上運賃タブ 실화면 스크린샷 첨부, "어떤 검색조건을 넣었을때 다른
+     항목들이 그 검색조건에 맞는 조건들만 표시될 수 있도록 할 수 있나요? 가능하면 다른
+     탭들도 만들어 주세요.")
+     - **배경**: 売上タブには 이미 이런 카스케이드 필터(`bookingMatchesExcept`/
+       `computeOptions`/`refreshSalesFilterUI`, v2.2.90 이전부터 존재)가 구현되어 있었으나,
+       나머지 5개 탭(Commission·仕入·運送料·通関·海上運賃)은 각 필터의 「선택지」 목록이
+       탭 진입 시 전체 데이터로 한 번만 계산되고 이후 재계산되지 않아, 다른 조건을 선택해도
+       Invoice No/Booking No/B/L No. 등 멀티셀렉트의 후보 목록이 좁혀지지 않는 문제가 있었음
+       (스크린샷의 海上運賃タブ 支払日(個別)=2026-09-01 선택 사례).
+     - **수정 내용**: 5개 탭 각각에 売上タブと完全に동일한 패턴으로 3종 함수 신규 추가:
+       `{tab}MatchesExcept(row, exceptDim)`(자기 자신을 제외한 다른 조건에 일치하는지 판정)·
+       `compute{Tab}Options(dim)`(그 결과로 선택지 목록 재계산)·
+       `refresh{Tab}FilterUI()`(선택지 재계산 + 더 이상 유효하지 않은 기존 선택값 자동 정리 +
+       각 멀티셀렉트/셀렉트 재렌더링 + `render{Tab}Table()` 호출).
+       - Commission: `commissionMatchesExcept`/`computeCommissionOptions`/
+         `refreshCommissionFilterUI` — 대상: 販売先(cm-buyer)·Agent·販売CO·Invoice No·
+         支払日(個別).
+       - 仕入: `purchaseMatchesExcept`/`computePurchaseOptions`/`refreshPurchaseFilterUI` —
+         대상: 販売先(pc-buyer)·購買ID(pc-pid)·購買契約番号·Invoice No·Booking No·
+         Container No·作業日(個別)·支払日(個別).
+       - 運送料: `drayMatchesExcept`/`computeDrayOptions`/`refreshDrayFilterUI` — 대상:
+         運送業者(dr-vendor)·営業所(dr-plant)·Invoice No·Booking No·Container No·
+         作業日(個別)·支払日(個別).
+       - 通関: `customsMatchesExcept`/`computeCustomsOptions`/`refreshCustomsFilterUI` —
+         대상: 乙仲(cu-forwarder)·Invoice No·Booking No·ATD(個別)·支払日(個別).
+       - 海上運賃: `maritimeMatchesExcept`/`computeMaritimeOptions`/
+         `refreshMaritimeFilterUI` — 대상: POL·POD·Invoice No·Booking No·B/L No.·
+         ATD(個別)·支払日(個別)（사용자가 스크린샷으로 지적한 탭）.
+     - **부분일치(候補表示) 필드는 자동클리어 대상에서 제외**: 船社(mt-carrier)·購買元
+       (pc-packer)·運送業者(dr-vendor는 완전일치 셀렉트라 포함)처럼 候補表示 텍스트
+       입력형 필드는 売上タブ 販売先(buyer, v2.2.106)와 동일하게 다른 필터의 선택지
+       계산에는 반영하되, 자기 자신은 완全一致 옵션 목록이 없으므로 자동클리어 로직에서
+       제외(값 유지).
+     - **와이어링**: 각 탭 `init{Tab}Tab()` 내 필터 요소(멀티셀렉트/셀렉트/날짜입력/
+       候補表示 텍스트입력/未入力のみ체크박스)의 콜백을 기존 `render{Tab}Table`에서
+       `refresh{Tab}FilterUI`로 전부 교체(대상 요소 수: Commission 9개, 仕入 13개,
+       運送料 12개, 通関 8개, 海上運賃 11개). 조건クリア(reset) 버튼은 기존과 동일하게
+       `init{Tab}Tab()` 재호출(전체 초기화이므로 카스케이드 재계산 불필요, 변경 없음).
+       各`init{Tab}Tab()` 함수 마지막의 `render{Tab}Table()` 호출도 `refresh{Tab}FilterUI()`
+       로 교체해 탭 진입 시부터 일관된 옵션 재계산이 이루어지도록 함.
+     - **범위 밖(변경 없음)**: 一括編集(PATCH) 성공 후의 재렌더링(`render{Tab}Table()`
+       그대로 호출, 売上タブ도 동일 패턴 — 저장 후에는 필터 조건 자체가 바뀐 것이 아니므로
+       옵션 재계산 불필요)·헤더 정렬(`wireSortableHeader`)·편집바 취소(`eb-cancel` 계열)·
+       Excel出力(`export*Excel`)·실제 필터링(`render*Table`) 로직·표 컬럼·集計바·PATCH
+       로직은 전혀 손대지 않음(売上タブ의 기존 카스케이드 구현도 그대로 변경 없음).
+     - **문법/전체 검토**: 수정 후 `node --check`로 JS 문법 오류 없음 확인. HTML 태그 짝은
+       v2.2.155 baseline과 완전히 일치(이번 수정은 `<script>` 내부 JS 함수 추가·콜백 교체만
+       이며 마크업 변경 없음 — 신규 element id 참조는 모두 기존에 존재하던 id를 그대로
+       사용). `✦ Powered by LEENAI Automation System` 문구 8곳 전부 v2.2.155 대비 변경 없음
+       유지 확인.
+     - **미검증**: 라이브 화면에서의 실제 동작(선택 시 다른 탭들의 목록이 올바르게
+       좁혀지는지) 확인은 다음 세션에서 사용자 확인 필요 — 로직은 이미 실사용 중인
+       売上タブ와 100% 동일한 패턴을 그대로 복제한 것이라 회귀 위험은 낮음.
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -7165,6 +7220,59 @@ const commissionFilter = {
 };
 let commissionSelectedInvoices = new Set(); // v2.2.83: 복수선택 지원(전체선택/개별체크 → 일괄편집)
 
+/* v2.2.156 신규: カスケード(連動)フィルタ — 売上タブ(bookingMatchesExcept/computeOptions/
+   refreshSalesFilterUI, v2.2.90 이전부터 존재)와 완전히 동일한 패턴. 각 필터의 「선택지」
+   자체를, 다른 선택 중인 조건에 일치하는 데이터만으로 재계산한다. */
+function commissionMatchesExcept(b, exceptDim){
+  const f = commissionFilter;
+  if(exceptDim!=='buyer' && f.buyer && b.buyer !== f.buyer) return false;
+  if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
+  if(exceptDim!=='saleCO' && f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false;
+  if(exceptDim!=='agent' && f.agent.selected.length && !f.agent.selected.includes(b.agent)) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(b.invoiceNo.includes(f.freeText) || b.saleCO.includes(f.freeText))) return false;
+  if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
+  if(exceptDim!=='paymentRange' && !matchDateField(b.agentPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+  if(exceptDim!=='paymentDateMulti' && f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false;
+  return true;
+}
+
+function computeCommissionOptions(dim){
+  const matches = bookings.filter(b=>commissionMatchesExcept(b, dim));
+  switch(dim){
+    case 'buyer':            return uniq(matches.map(b=>b.buyer)).sort();
+    case 'invoiceNo':        return uniq(matches.map(b=>b.invoiceNo)).sort();
+    case 'saleCO':           return uniq(matches.map(b=>b.saleCO)).sort();
+    case 'agent':            return uniq(matches.map(b=>b.agent).filter(Boolean)).sort();
+    case 'paymentDateMulti': return uniq(matches.map(b=>b.agentPaymentDate).filter(Boolean)).sort().reverse();
+    default: return [];
+  }
+}
+
+/* すべてのフィルタUI（選択肢+選択状態）を、現在の他条件に合わせて再計算・再描画する */
+function refreshCommissionFilterUI(){
+  const f = commissionFilter;
+  const buyerOptions       = computeCommissionOptions('buyer');
+  const saleCOOptions      = computeCommissionOptions('saleCO');
+  const agentOptions       = computeCommissionOptions('agent');
+  const invoiceOptions     = computeCommissionOptions('invoiceNo');
+  const paymentDateOptions = computeCommissionOptions('paymentDateMulti');
+
+  // 이제 유효하지 않은(다른 조건과 겹치지 않는) 기존 선택값은 자동으로 정리
+  if(f.buyer && !buyerOptions.includes(f.buyer)) f.buyer = '';
+  f.saleCO.selected = f.saleCO.selected.filter(v=>saleCOOptions.includes(v));
+  f.agent.selected = f.agent.selected.filter(v=>agentOptions.includes(v));
+  f.invoiceNo.selected = f.invoiceNo.selected.filter(v=>invoiceOptions.includes(v));
+  f.paymentDateMulti.selected = f.paymentDateMulti.selected.filter(v=>paymentDateOptions.includes(v));
+
+  renderMultiSelect('msel-cm-agent', 'Agent', 'multi', agentOptions, f.agent, refreshCommissionFilterUI);
+  rebuildSelect('cm-buyer', buyerOptions, f.buyer);
+  renderMultiSelect('msel-cm-saleco', '販売CO', 'multi', saleCOOptions, f.saleCO, refreshCommissionFilterUI);
+  renderMultiSelect('msel-cm-invoice', 'Invoice No', 'multi', invoiceOptions, f.invoiceNo, refreshCommissionFilterUI);
+  renderMultiSelect('msel-cm-paydate', '支払日(個別)', 'multi', paymentDateOptions, f.paymentDateMulti, refreshCommissionFilterUI);
+
+  renderCommissionTable();
+}
+
 function initCommissionTab(){
   const panel = document.getElementById('panel-commission');
   // v2.2.22: 販売先 필터 옵션은 売上タブと同一하게 그룹(購買元) 단위 buyer 사용(사용자 지시로 v2.2.21 되돌림)
@@ -7267,17 +7375,17 @@ function initCommissionTab(){
     e.target.textContent = grid.classList.contains('collapsed') ? '▼' : '▲';
   };
 
-  renderMultiSelect('msel-cm-agent', 'Agent', 'multi', agentOptions, commissionFilter.agent, renderCommissionTable); // v2.2.112: 그리드 순서(Agent/販売先/販売CO/ATD/Invoice No/フリー検索/支払日/条件クリア)에 맞춰 호출순서 재배열(로직 변경 없음)
-  document.getElementById('cm-buyer').onchange   = (e)=>{ commissionFilter.buyer = e.target.value; renderCommissionTable(); };
-  renderMultiSelect('msel-cm-saleco', '販売CO', 'multi', saleCOOptions, commissionFilter.saleCO, renderCommissionTable);
-  document.getElementById('cm-atd-from').onchange = (e)=>{ commissionFilter.atdFrom = e.target.value; renderCommissionTable(); };
-  document.getElementById('cm-atd-to').onchange   = (e)=>{ commissionFilter.atdTo = e.target.value; renderCommissionTable(); };
-  renderMultiSelect('msel-cm-invoice', 'Invoice No', 'multi', invoiceOptions, commissionFilter.invoiceNo, renderCommissionTable);
-  wireFreeTextAutocomplete('cm-freetext', q=>freeTextCandidates(bookings, ['invoiceNo','saleCO'], q), v=>{ commissionFilter.freeText = v; renderCommissionTable(); }); // v2.2.77 신규
-  document.getElementById('cm-pay-from').onchange = (e)=>{ commissionFilter.paymentFrom = e.target.value; renderCommissionTable(); };
-  document.getElementById('cm-pay-to').onchange   = (e)=>{ commissionFilter.paymentTo = e.target.value; renderCommissionTable(); };
-  wireEmptyOnlyCheckbox('cm-pay-empty', 'cm-pay-from', 'cm-pay-to', commissionFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', renderCommissionTable); // v2.2.66
-  renderMultiSelect('msel-cm-paydate', '支払日(個別)', 'multi', paymentDateOpts, commissionFilter.paymentDateMulti, renderCommissionTable); // v2.2.146 신규
+  renderMultiSelect('msel-cm-agent', 'Agent', 'multi', agentOptions, commissionFilter.agent, refreshCommissionFilterUI); // v2.2.112: 그리드 순서(Agent/販売先/販売CO/ATD/Invoice No/フリー検索/支払日/条件クリア)에 맞춰 호출순서 재배열(로직 변경 없음) / v2.2.156: カスケードフィルタ적용으로 콜백을 refreshCommissionFilterUI로 변경
+  document.getElementById('cm-buyer').onchange   = (e)=>{ commissionFilter.buyer = e.target.value; refreshCommissionFilterUI(); };
+  renderMultiSelect('msel-cm-saleco', '販売CO', 'multi', saleCOOptions, commissionFilter.saleCO, refreshCommissionFilterUI);
+  document.getElementById('cm-atd-from').onchange = (e)=>{ commissionFilter.atdFrom = e.target.value; refreshCommissionFilterUI(); };
+  document.getElementById('cm-atd-to').onchange   = (e)=>{ commissionFilter.atdTo = e.target.value; refreshCommissionFilterUI(); };
+  renderMultiSelect('msel-cm-invoice', 'Invoice No', 'multi', invoiceOptions, commissionFilter.invoiceNo, refreshCommissionFilterUI);
+  wireFreeTextAutocomplete('cm-freetext', q=>freeTextCandidates(bookings, ['invoiceNo','saleCO'], q), v=>{ commissionFilter.freeText = v; refreshCommissionFilterUI(); }); // v2.2.77 신규
+  document.getElementById('cm-pay-from').onchange = (e)=>{ commissionFilter.paymentFrom = e.target.value; refreshCommissionFilterUI(); };
+  document.getElementById('cm-pay-to').onchange   = (e)=>{ commissionFilter.paymentTo = e.target.value; refreshCommissionFilterUI(); };
+  wireEmptyOnlyCheckbox('cm-pay-empty', 'cm-pay-from', 'cm-pay-to', commissionFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', refreshCommissionFilterUI); // v2.2.66
+  renderMultiSelect('msel-cm-paydate', '支払日(個別)', 'multi', paymentDateOpts, commissionFilter.paymentDateMulti, refreshCommissionFilterUI); // v2.2.146 신규 / v2.2.156: カスケードフィルタ적용
   document.getElementById('cm-reset').onclick = ()=>{
     commissionFilter.buyer=''; commissionFilter.invoiceNo.selected=[]; commissionFilter.saleCO.selected=[];
     commissionFilter.agent.selected=[]; commissionFilter.freeText=''; commissionFilter.atdFrom=''; commissionFilter.atdTo='';
@@ -7301,7 +7409,7 @@ function initCommissionTab(){
   document.getElementById('btn-live-load-cm').onclick = ()=> loadLiveSales(FETCH_TOP_LIMIT, {errId:'cm-live-err', warnId:'cm-live-warn', btnId:'btn-live-load-cm'}); // v2.2.124 신규
   wireFetchPeriodSync('live-atd-from-cm', 'live-atd-to-cm', false); // v2.2.126: 売上系 그룹
 
-  renderCommissionTable();
+  refreshCommissionFilterUI(); // v2.2.156: 초기 표시부터 카스케이드 옵션 재계산 적용
 }
 
 function renderCommissionTable(){
@@ -7556,6 +7664,72 @@ const purchaseFilter = {
 };
 let purchaseSelectedIds = new Set(); // v2.2.83: 복수선택 지원(전체선택/개별체크 → 일괄편집)
 
+/* v2.2.156 신규: カスケード(連動)フィルタ — 売上タブと同一パターン(§commissionMatchesExcept 참조). */
+function purchaseMatchesExcept(c, exceptDim){
+  const f = purchaseFilter;
+  if(exceptDim!=='buyer' && f.buyer && c.buyer !== f.buyer) return false;
+  if(exceptDim!=='purchaseId' && f.purchaseId && String(c.purchaseId) !== f.purchaseId) return false;
+  if(exceptDim!=='purchaseContractNo' && f.purchaseContractNo.selected.length && !f.purchaseContractNo.selected.includes(c.purchaseContractNo)) return false;
+  if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
+  if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
+  if(exceptDim!=='containerNo' && f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
+  if(exceptDim!=='packer' && f.packer && !(c.packer||'').includes(f.packer)) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(c.invoiceNo.includes(f.freeText) || c.bookingNo.includes(f.freeText) || c.containerNo.includes(f.freeText))) return false;
+  if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
+  if(exceptDim!=='workRange' && (f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
+  if(exceptDim!=='paymentRange' && !matchDateField(c.paymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+  if(exceptDim!=='workDateMulti' && f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false;
+  if(exceptDim!=='paymentDateMulti' && f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.paymentDate)) return false;
+  return true;
+}
+
+function computePurchaseOptions(dim){
+  const matches = purchaseContainers.filter(c=>purchaseMatchesExcept(c, dim));
+  switch(dim){
+    case 'buyer':             return uniq(matches.map(c=>c.buyer)).sort();
+    case 'purchaseId':        return uniq(matches.map(c=>c.purchaseId)).sort((a,b)=>a-b);
+    case 'purchaseContractNo':return uniq(matches.map(c=>c.purchaseContractNo)).sort();
+    case 'invoiceNo':         return uniq(matches.map(c=>c.invoiceNo)).sort();
+    case 'bookingNo':         return uniq(matches.map(c=>c.bookingNo)).sort();
+    case 'containerNo':       return uniq(matches.map(c=>c.containerNo)).sort();
+    case 'workDateMulti':     return uniq(matches.map(c=>c.workDate).filter(Boolean)).sort().reverse();
+    case 'paymentDateMulti':  return uniq(matches.map(c=>c.paymentDate).filter(Boolean)).sort().reverse();
+    default: return [];
+  }
+}
+
+function refreshPurchaseFilterUI(){
+  const f = purchaseFilter;
+  const buyerOptions      = computePurchaseOptions('buyer');
+  const pidOptions        = computePurchaseOptions('purchaseId');
+  const contractNoOptions = computePurchaseOptions('purchaseContractNo');
+  const invoiceOptions    = computePurchaseOptions('invoiceNo');
+  const bookingOptions    = computePurchaseOptions('bookingNo');
+  const containerOptions  = computePurchaseOptions('containerNo');
+  const workDateOptions   = computePurchaseOptions('workDateMulti');
+  const paymentDateOptions= computePurchaseOptions('paymentDateMulti');
+
+  if(f.buyer && !buyerOptions.includes(f.buyer)) f.buyer = '';
+  if(f.purchaseId && !pidOptions.map(String).includes(f.purchaseId)) f.purchaseId = '';
+  f.purchaseContractNo.selected = f.purchaseContractNo.selected.filter(v=>contractNoOptions.includes(v));
+  f.invoiceNo.selected = f.invoiceNo.selected.filter(v=>invoiceOptions.includes(v));
+  f.bookingNo.selected = f.bookingNo.selected.filter(v=>bookingOptions.includes(v));
+  f.containerNo.selected = f.containerNo.selected.filter(v=>containerOptions.includes(v));
+  f.workDateMulti.selected = f.workDateMulti.selected.filter(v=>workDateOptions.includes(v));
+  f.paymentDateMulti.selected = f.paymentDateMulti.selected.filter(v=>paymentDateOptions.includes(v));
+
+  renderMultiSelect('msel-pc-invoice', 'Invoice No', 'multi', invoiceOptions, f.invoiceNo, refreshPurchaseFilterUI);
+  renderMultiSelect('msel-pc-booking', 'Booking No', 'multi', bookingOptions, f.bookingNo, refreshPurchaseFilterUI);
+  renderMultiSelect('msel-pc-container', 'Container No', 'multi', containerOptions, f.containerNo, refreshPurchaseFilterUI);
+  renderMultiSelect('msel-pc-contractno', '購買契約番号', 'multi', contractNoOptions, f.purchaseContractNo, refreshPurchaseFilterUI);
+  rebuildSelect('pc-buyer', buyerOptions, f.buyer);
+  rebuildSelect('pc-pid', pidOptions, f.purchaseId);
+  renderMultiSelect('msel-pc-workdate', '作業日(個別)', 'multi', workDateOptions, f.workDateMulti, refreshPurchaseFilterUI);
+  renderMultiSelect('msel-pc-paydate', '支払日(個別)', 'multi', paymentDateOptions, f.paymentDateMulti, refreshPurchaseFilterUI);
+
+  renderPurchaseTable();
+}
+
 function initPurchaseTab(){
   const panel = document.getElementById('panel-purchase');
   const buyerOpts   = uniq(purchaseContainers.map(c=>c.buyer)).sort();
@@ -7680,24 +7854,24 @@ function initPurchaseTab(){
     e.target.textContent = grid.classList.contains('collapsed') ? '▼' : '▲';
   };
 
-  wireFreeTextAutocomplete('pc-packer', q=>freeTextCandidates(purchaseContainers, ['packer'], q), v=>{ purchaseFilter.packer = v; renderPurchaseTable(); }); // v2.2.111: 検索条件 맨 앞으로 배치 이동(호출순서도 그리드순서에 맞춰 조정, 로직 변경 없음)
-  renderMultiSelect('msel-pc-invoice', 'Invoice No', 'multi', invoiceOpts, purchaseFilter.invoiceNo, renderPurchaseTable);
-  renderMultiSelect('msel-pc-booking', 'Booking No', 'multi', bookingOpts, purchaseFilter.bookingNo, renderPurchaseTable);
-  renderMultiSelect('msel-pc-container', 'Container No', 'multi', cntrOpts, purchaseFilter.containerNo, renderPurchaseTable);
-  renderMultiSelect('msel-pc-contractno', '購買契約番号', 'multi', contractNoOpts, purchaseFilter.purchaseContractNo, renderPurchaseTable); // v2.2.93 신규 (v2.2.94: 購買元 뒤로 위치 이동)
+  wireFreeTextAutocomplete('pc-packer', q=>freeTextCandidates(purchaseContainers, ['packer'], q), v=>{ purchaseFilter.packer = v; refreshPurchaseFilterUI(); }); // v2.2.111: 検索条件 맨 앞으로 배치 이동(호출순서도 그리드순서에 맞춰 조정, 로직 변경 없음) / v2.2.156: 카스케이드 적용
+  renderMultiSelect('msel-pc-invoice', 'Invoice No', 'multi', invoiceOpts, purchaseFilter.invoiceNo, refreshPurchaseFilterUI);
+  renderMultiSelect('msel-pc-booking', 'Booking No', 'multi', bookingOpts, purchaseFilter.bookingNo, refreshPurchaseFilterUI);
+  renderMultiSelect('msel-pc-container', 'Container No', 'multi', cntrOpts, purchaseFilter.containerNo, refreshPurchaseFilterUI);
+  renderMultiSelect('msel-pc-contractno', '購買契約番号', 'multi', contractNoOpts, purchaseFilter.purchaseContractNo, refreshPurchaseFilterUI); // v2.2.93 신규 (v2.2.94: 購買元 뒤로 위치 이동)
 
-  wireFreeTextAutocomplete('pc-freetext', q=>freeTextCandidates(purchaseContainers, ['invoiceNo','bookingNo','containerNo'], q), v=>{ purchaseFilter.freeText = v; renderPurchaseTable(); }); // v2.2.77 신규
-  document.getElementById('pc-buyer').onchange = (e)=>{ purchaseFilter.buyer = e.target.value; renderPurchaseTable(); };
-  document.getElementById('pc-pid').onchange   = (e)=>{ purchaseFilter.purchaseId = e.target.value; renderPurchaseTable(); };
-  document.getElementById('pc-atd-from').onchange = (e)=>{ purchaseFilter.atdFrom = e.target.value; renderPurchaseTable(); };
-  document.getElementById('pc-atd-to').onchange   = (e)=>{ purchaseFilter.atdTo = e.target.value; renderPurchaseTable(); };
-  document.getElementById('pc-work-from').onchange = (e)=>{ purchaseFilter.workFrom = e.target.value; renderPurchaseTable(); };
-  document.getElementById('pc-work-to').onchange   = (e)=>{ purchaseFilter.workTo = e.target.value; renderPurchaseTable(); };
-  document.getElementById('pc-pay-from').onchange  = (e)=>{ purchaseFilter.paymentFrom = e.target.value; renderPurchaseTable(); };
-  document.getElementById('pc-pay-to').onchange    = (e)=>{ purchaseFilter.paymentTo = e.target.value; renderPurchaseTable(); };
-  wireEmptyOnlyCheckbox('pc-pay-empty', 'pc-pay-from', 'pc-pay-to', purchaseFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', renderPurchaseTable); // v2.2.66
-  renderMultiSelect('msel-pc-workdate', '作業日(個別)', 'multi', workDateOpts, purchaseFilter.workDateMulti, renderPurchaseTable); // v2.2.146 신규
-  renderMultiSelect('msel-pc-paydate', '支払日(個別)', 'multi', paymentDateOpts, purchaseFilter.paymentDateMulti, renderPurchaseTable); // v2.2.146 신규
+  wireFreeTextAutocomplete('pc-freetext', q=>freeTextCandidates(purchaseContainers, ['invoiceNo','bookingNo','containerNo'], q), v=>{ purchaseFilter.freeText = v; refreshPurchaseFilterUI(); }); // v2.2.77 신규
+  document.getElementById('pc-buyer').onchange = (e)=>{ purchaseFilter.buyer = e.target.value; refreshPurchaseFilterUI(); };
+  document.getElementById('pc-pid').onchange   = (e)=>{ purchaseFilter.purchaseId = e.target.value; refreshPurchaseFilterUI(); };
+  document.getElementById('pc-atd-from').onchange = (e)=>{ purchaseFilter.atdFrom = e.target.value; refreshPurchaseFilterUI(); };
+  document.getElementById('pc-atd-to').onchange   = (e)=>{ purchaseFilter.atdTo = e.target.value; refreshPurchaseFilterUI(); };
+  document.getElementById('pc-work-from').onchange = (e)=>{ purchaseFilter.workFrom = e.target.value; refreshPurchaseFilterUI(); };
+  document.getElementById('pc-work-to').onchange   = (e)=>{ purchaseFilter.workTo = e.target.value; refreshPurchaseFilterUI(); };
+  document.getElementById('pc-pay-from').onchange  = (e)=>{ purchaseFilter.paymentFrom = e.target.value; refreshPurchaseFilterUI(); };
+  document.getElementById('pc-pay-to').onchange    = (e)=>{ purchaseFilter.paymentTo = e.target.value; refreshPurchaseFilterUI(); };
+  wireEmptyOnlyCheckbox('pc-pay-empty', 'pc-pay-from', 'pc-pay-to', purchaseFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', refreshPurchaseFilterUI); // v2.2.66
+  renderMultiSelect('msel-pc-workdate', '作業日(個別)', 'multi', workDateOpts, purchaseFilter.workDateMulti, refreshPurchaseFilterUI); // v2.2.146 신규 / v2.2.156: 카스케이드 적용
+  renderMultiSelect('msel-pc-paydate', '支払日(個別)', 'multi', paymentDateOpts, purchaseFilter.paymentDateMulti, refreshPurchaseFilterUI); // v2.2.146 신규 / v2.2.156: 카스케이드 적용
   document.getElementById('pc-reset').onclick = ()=>{
     purchaseFilter.buyer=''; purchaseFilter.purchaseId=''; purchaseFilter.packer=''; // v2.2.107: packer 문자열로 변경
     purchaseFilter.purchaseContractNo.selected=[]; // v2.2.93 신규
@@ -7725,7 +7899,7 @@ function initPurchaseTab(){
   document.getElementById('btn-live-load-pc').onclick = ()=> loadLiveDray(FETCH_TOP_LIMIT, {errId:'pc-live-err', warnId:'pc-live-warn', btnId:'btn-live-load-pc'}); // v2.2.124 신규
   wireFetchPeriodSync('live-work-from-pc', 'live-work-to-pc', true); // v2.2.126: 運送料系 그룹
 
-  renderPurchaseTable();
+  refreshPurchaseFilterUI(); // v2.2.156: 초기 표시부터 카스케이드 옵션 재계산 적용
 }
 
 function renderPurchaseTable(){
@@ -7989,6 +8163,66 @@ const drayFilter = {
 };
 let draySelectedIds = new Set(); // v2.2.83: 복수선택 지원(전체선택/개별체크 → 일괄편집)
 
+/* v2.2.156 신규: カスケード(連動)フィルタ — 売上タブと同一パターン(§commissionMatchesExcept 참조). */
+function drayMatchesExcept(c, exceptDim){
+  const f = drayFilter;
+  if(exceptDim!=='plant' && f.plant && c.drayPlant !== f.plant) return false;
+  if(exceptDim!=='vendor' && f.vendor && c.drayVendor !== f.vendor) return false;
+  if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
+  if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
+  if(exceptDim!=='containerNo' && f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(c.invoiceNo.includes(f.freeText) || c.bookingNo.includes(f.freeText) || c.containerNo.includes(f.freeText))) return false;
+  if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
+  if(exceptDim!=='workRange' && (f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
+  if(exceptDim!=='paymentRange' && !matchDateField(c.drayPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+  if(exceptDim!=='workDateMulti' && f.workDateMulti.selected.length && !f.workDateMulti.selected.includes(c.workDate)) return false;
+  if(exceptDim!=='paymentDateMulti' && f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(c.drayPaymentDate)) return false;
+  return true;
+}
+
+function computeDrayOptions(dim){
+  const matches = purchaseContainers.filter(c=>drayMatchesExcept(c, dim));
+  switch(dim){
+    case 'plant':            return uniq(matches.map(c=>c.drayPlant)).sort();
+    case 'vendor':           return uniq(matches.map(c=>c.drayVendor)).sort();
+    case 'invoiceNo':        return uniq(matches.map(c=>c.invoiceNo)).sort();
+    case 'bookingNo':        return uniq(matches.map(c=>c.bookingNo)).sort();
+    case 'containerNo':      return uniq(matches.map(c=>c.containerNo)).sort();
+    case 'workDateMulti':    return uniq(matches.map(c=>c.workDate).filter(Boolean)).sort().reverse();
+    case 'paymentDateMulti': return uniq(matches.map(c=>c.drayPaymentDate).filter(Boolean)).sort().reverse();
+    default: return [];
+  }
+}
+
+function refreshDrayFilterUI(){
+  const f = drayFilter;
+  const plantOptions       = computeDrayOptions('plant');
+  const vendorOptions      = computeDrayOptions('vendor');
+  const invoiceOptions     = computeDrayOptions('invoiceNo');
+  const bookingOptions     = computeDrayOptions('bookingNo');
+  const containerOptions   = computeDrayOptions('containerNo');
+  const workDateOptions    = computeDrayOptions('workDateMulti');
+  const paymentDateOptions = computeDrayOptions('paymentDateMulti');
+
+  if(f.plant && !plantOptions.includes(f.plant)) f.plant = '';
+  if(f.vendor && !vendorOptions.includes(f.vendor)) f.vendor = '';
+  f.invoiceNo.selected = f.invoiceNo.selected.filter(v=>invoiceOptions.includes(v));
+  f.bookingNo.selected = f.bookingNo.selected.filter(v=>bookingOptions.includes(v));
+  f.containerNo.selected = f.containerNo.selected.filter(v=>containerOptions.includes(v));
+  f.workDateMulti.selected = f.workDateMulti.selected.filter(v=>workDateOptions.includes(v));
+  f.paymentDateMulti.selected = f.paymentDateMulti.selected.filter(v=>paymentDateOptions.includes(v));
+
+  rebuildSelect('dr-vendor', vendorOptions, f.vendor);
+  renderMultiSelect('msel-dr-invoice', 'Invoice No', 'multi', invoiceOptions, f.invoiceNo, refreshDrayFilterUI);
+  renderMultiSelect('msel-dr-booking', 'Booking No', 'multi', bookingOptions, f.bookingNo, refreshDrayFilterUI);
+  renderMultiSelect('msel-dr-container', 'Container No', 'multi', containerOptions, f.containerNo, refreshDrayFilterUI);
+  rebuildSelect('dr-plant', plantOptions, f.plant);
+  renderMultiSelect('msel-dr-workdate', '作業日(個別)', 'multi', workDateOptions, f.workDateMulti, refreshDrayFilterUI);
+  renderMultiSelect('msel-dr-paydate', '支払日(個別)', 'multi', paymentDateOptions, f.paymentDateMulti, refreshDrayFilterUI);
+
+  renderDrayTable();
+}
+
 function initDrayTab(){
   const panel = document.getElementById('panel-dray');
   const vendorOpts  = uniq(purchaseContainers.map(c=>c.drayVendor)).sort();
@@ -8104,22 +8338,22 @@ function initDrayTab(){
     e.target.textContent = grid.classList.contains('collapsed') ? '▼' : '▲';
   };
 
-  document.getElementById('dr-vendor').onchange = (e)=>{ drayFilter.vendor = e.target.value; renderDrayTable(); }; // v2.2.108: 複数選択→単一選択으로 변경
-  renderMultiSelect('msel-dr-invoice', 'Invoice No', 'multi', invoiceOpts, drayFilter.invoiceNo, renderDrayTable);
-  renderMultiSelect('msel-dr-booking', 'Booking No', 'multi', bookingOpts, drayFilter.bookingNo, renderDrayTable);
-  renderMultiSelect('msel-dr-container', 'Container No', 'multi', cntrOpts, drayFilter.containerNo, renderDrayTable);
+  document.getElementById('dr-vendor').onchange = (e)=>{ drayFilter.vendor = e.target.value; refreshDrayFilterUI(); }; // v2.2.108: 複数選択→単一選択으로 변경 / v2.2.156: 카스케이드 적용
+  renderMultiSelect('msel-dr-invoice', 'Invoice No', 'multi', invoiceOpts, drayFilter.invoiceNo, refreshDrayFilterUI);
+  renderMultiSelect('msel-dr-booking', 'Booking No', 'multi', bookingOpts, drayFilter.bookingNo, refreshDrayFilterUI);
+  renderMultiSelect('msel-dr-container', 'Container No', 'multi', cntrOpts, drayFilter.containerNo, refreshDrayFilterUI);
 
-  wireFreeTextAutocomplete('dr-freetext', q=>freeTextCandidates(purchaseContainers, ['invoiceNo','bookingNo','containerNo'], q), v=>{ drayFilter.freeText = v; renderDrayTable(); }); // v2.2.77 신규
-  document.getElementById('dr-plant').onchange = (e)=>{ drayFilter.plant = e.target.value; renderDrayTable(); };
-  document.getElementById('dr-atd-from').onchange = (e)=>{ drayFilter.atdFrom = e.target.value; renderDrayTable(); };
-  document.getElementById('dr-atd-to').onchange   = (e)=>{ drayFilter.atdTo = e.target.value; renderDrayTable(); };
-  document.getElementById('dr-work-from').onchange = (e)=>{ drayFilter.workFrom = e.target.value; renderDrayTable(); };
-  document.getElementById('dr-work-to').onchange   = (e)=>{ drayFilter.workTo = e.target.value; renderDrayTable(); };
-  document.getElementById('dr-pay-from').onchange  = (e)=>{ drayFilter.paymentFrom = e.target.value; renderDrayTable(); };
-  document.getElementById('dr-pay-to').onchange    = (e)=>{ drayFilter.paymentTo = e.target.value; renderDrayTable(); };
-  wireEmptyOnlyCheckbox('dr-pay-empty', 'dr-pay-from', 'dr-pay-to', drayFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', renderDrayTable); // v2.2.66
-  renderMultiSelect('msel-dr-workdate', '作業日(個別)', 'multi', workDateOpts, drayFilter.workDateMulti, renderDrayTable); // v2.2.146 신규
-  renderMultiSelect('msel-dr-paydate', '支払日(個別)', 'multi', paymentDateOpts, drayFilter.paymentDateMulti, renderDrayTable); // v2.2.146 신규
+  wireFreeTextAutocomplete('dr-freetext', q=>freeTextCandidates(purchaseContainers, ['invoiceNo','bookingNo','containerNo'], q), v=>{ drayFilter.freeText = v; refreshDrayFilterUI(); }); // v2.2.77 신규
+  document.getElementById('dr-plant').onchange = (e)=>{ drayFilter.plant = e.target.value; refreshDrayFilterUI(); };
+  document.getElementById('dr-atd-from').onchange = (e)=>{ drayFilter.atdFrom = e.target.value; refreshDrayFilterUI(); };
+  document.getElementById('dr-atd-to').onchange   = (e)=>{ drayFilter.atdTo = e.target.value; refreshDrayFilterUI(); };
+  document.getElementById('dr-work-from').onchange = (e)=>{ drayFilter.workFrom = e.target.value; refreshDrayFilterUI(); };
+  document.getElementById('dr-work-to').onchange   = (e)=>{ drayFilter.workTo = e.target.value; refreshDrayFilterUI(); };
+  document.getElementById('dr-pay-from').onchange  = (e)=>{ drayFilter.paymentFrom = e.target.value; refreshDrayFilterUI(); };
+  document.getElementById('dr-pay-to').onchange    = (e)=>{ drayFilter.paymentTo = e.target.value; refreshDrayFilterUI(); };
+  wireEmptyOnlyCheckbox('dr-pay-empty', 'dr-pay-from', 'dr-pay-to', drayFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', refreshDrayFilterUI); // v2.2.66
+  renderMultiSelect('msel-dr-workdate', '作業日(個別)', 'multi', workDateOpts, drayFilter.workDateMulti, refreshDrayFilterUI); // v2.2.146 신규 / v2.2.156: 카스케이드 적용
+  renderMultiSelect('msel-dr-paydate', '支払日(個別)', 'multi', paymentDateOpts, drayFilter.paymentDateMulti, refreshDrayFilterUI); // v2.2.146 신규 / v2.2.156: 카스케이드 적용
   document.getElementById('dr-reset').onclick = ()=>{
     drayFilter.plant='';
     drayFilter.invoiceNo.selected=[]; drayFilter.bookingNo.selected=[];
@@ -8149,7 +8383,7 @@ function initDrayTab(){
   };
   wireFetchPeriodSync('live-work-from', 'live-work-to', true); // v2.2.126: 運送料系 그룹(売上와 분리)
 
-  renderDrayTable();
+  refreshDrayFilterUI(); // v2.2.156: 초기 표시부터 카스케이드 옵션 재계산 적용
 }
 
 function renderDrayTable(){
@@ -8407,6 +8641,55 @@ const customsFilter = {
 };
 let customsSelectedInvoices = new Set(); // v2.2.83: 복수선택 지원(전체선택/개별체크 → 일괄편집)
 
+/* v2.2.156 신규: カスケード(連動)フィルタ — 売上タブと同一パターン(§commissionMatchesExcept 참조). */
+function customsMatchesExcept(b, exceptDim){
+  const f = customsFilter;
+  if(exceptDim!=='forwarder' && f.forwarder && b.forwarder !== f.forwarder) return false;
+  if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
+  if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+  if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
+  if(exceptDim!=='paymentRange' && !matchDateField(b.customPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+  if(exceptDim!=='atdMulti' && f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
+  if(exceptDim!=='paymentDateMulti' && f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.customPaymentDate)) return false;
+  return true;
+}
+
+function computeCustomsOptions(dim){
+  const matches = bookings.filter(b=>customsMatchesExcept(b, dim));
+  switch(dim){
+    case 'forwarder':        return uniq(matches.map(b=>b.forwarder)).sort();
+    case 'invoiceNo':        return uniq(matches.map(b=>b.invoiceNo)).sort();
+    case 'bookingNo':        return uniq(matches.map(b=>b.bookingNo)).sort();
+    case 'atdMulti':         return uniq(matches.map(b=>b.atd).filter(Boolean)).sort().reverse();
+    case 'paymentDateMulti': return uniq(matches.map(b=>b.customPaymentDate).filter(Boolean)).sort().reverse();
+    default: return [];
+  }
+}
+
+function refreshCustomsFilterUI(){
+  const f = customsFilter;
+  const forwarderOptions   = computeCustomsOptions('forwarder');
+  const invoiceOptions     = computeCustomsOptions('invoiceNo');
+  const bookingOptions     = computeCustomsOptions('bookingNo');
+  const atdOptions         = computeCustomsOptions('atdMulti');
+  const paymentDateOptions = computeCustomsOptions('paymentDateMulti');
+
+  if(f.forwarder && !forwarderOptions.includes(f.forwarder)) f.forwarder = '';
+  f.invoiceNo.selected = f.invoiceNo.selected.filter(v=>invoiceOptions.includes(v));
+  f.bookingNo.selected = f.bookingNo.selected.filter(v=>bookingOptions.includes(v));
+  f.atdMulti.selected = f.atdMulti.selected.filter(v=>atdOptions.includes(v));
+  f.paymentDateMulti.selected = f.paymentDateMulti.selected.filter(v=>paymentDateOptions.includes(v));
+
+  rebuildSelect('cu-forwarder', forwarderOptions, f.forwarder);
+  renderMultiSelect('msel-cu-invoice', 'Invoice No', 'multi', invoiceOptions, f.invoiceNo, refreshCustomsFilterUI);
+  renderMultiSelect('msel-cu-booking', 'Booking No', 'multi', bookingOptions, f.bookingNo, refreshCustomsFilterUI);
+  renderMultiSelect('msel-cu-atd', 'ATD(個別)', 'multi', atdOptions, f.atdMulti, refreshCustomsFilterUI);
+  renderMultiSelect('msel-cu-paydate', '支払日(個別)', 'multi', paymentDateOptions, f.paymentDateMulti, refreshCustomsFilterUI);
+
+  renderCustomsTable();
+}
+
 function initCustomsTab(){
   const panel = document.getElementById('panel-customs');
   const invoiceOpts   = uniq(bookings.map(b=>b.invoiceNo)).sort();
@@ -8510,18 +8793,18 @@ function initCustomsTab(){
     e.target.textContent = grid.classList.contains('collapsed') ? '▼' : '▲';
   };
 
-  document.getElementById('cu-forwarder').onchange = (e)=>{ customsFilter.forwarder = e.target.value; renderCustomsTable(); }; // v2.2.109: 複数選択→単一選択으로 변경
-  renderMultiSelect('msel-cu-invoice', 'Invoice No', 'multi', invoiceOpts, customsFilter.invoiceNo, renderCustomsTable);
-  renderMultiSelect('msel-cu-booking', 'Booking No', 'multi', bookingOpts, customsFilter.bookingNo, renderCustomsTable);
+  document.getElementById('cu-forwarder').onchange = (e)=>{ customsFilter.forwarder = e.target.value; refreshCustomsFilterUI(); }; // v2.2.109: 複数選択→単一選択으로 변경 / v2.2.156: 카스케이드 적용
+  renderMultiSelect('msel-cu-invoice', 'Invoice No', 'multi', invoiceOpts, customsFilter.invoiceNo, refreshCustomsFilterUI);
+  renderMultiSelect('msel-cu-booking', 'Booking No', 'multi', bookingOpts, customsFilter.bookingNo, refreshCustomsFilterUI);
 
-  wireFreeTextAutocomplete('cu-freetext', q=>freeTextCandidates(bookings, ['invoiceNo','bookingNo'], q), v=>{ customsFilter.freeText = v; renderCustomsTable(); }); // v2.2.77 신규
-  document.getElementById('cu-atd-from').onchange = (e)=>{ customsFilter.atdFrom = e.target.value; renderCustomsTable(); };
-  document.getElementById('cu-atd-to').onchange   = (e)=>{ customsFilter.atdTo = e.target.value; renderCustomsTable(); };
-  document.getElementById('cu-pay-from').onchange = (e)=>{ customsFilter.paymentFrom = e.target.value; renderCustomsTable(); };
-  document.getElementById('cu-pay-to').onchange   = (e)=>{ customsFilter.paymentTo = e.target.value; renderCustomsTable(); };
-  wireEmptyOnlyCheckbox('cu-pay-empty', 'cu-pay-from', 'cu-pay-to', customsFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', renderCustomsTable); // v2.2.66
-  renderMultiSelect('msel-cu-atd', 'ATD(個別)', 'multi', atdOpts, customsFilter.atdMulti, renderCustomsTable); // v2.2.146 신규
-  renderMultiSelect('msel-cu-paydate', '支払日(個別)', 'multi', paymentDateOpts, customsFilter.paymentDateMulti, renderCustomsTable); // v2.2.146 신규
+  wireFreeTextAutocomplete('cu-freetext', q=>freeTextCandidates(bookings, ['invoiceNo','bookingNo'], q), v=>{ customsFilter.freeText = v; refreshCustomsFilterUI(); }); // v2.2.77 신규
+  document.getElementById('cu-atd-from').onchange = (e)=>{ customsFilter.atdFrom = e.target.value; refreshCustomsFilterUI(); };
+  document.getElementById('cu-atd-to').onchange   = (e)=>{ customsFilter.atdTo = e.target.value; refreshCustomsFilterUI(); };
+  document.getElementById('cu-pay-from').onchange = (e)=>{ customsFilter.paymentFrom = e.target.value; refreshCustomsFilterUI(); };
+  document.getElementById('cu-pay-to').onchange   = (e)=>{ customsFilter.paymentTo = e.target.value; refreshCustomsFilterUI(); };
+  wireEmptyOnlyCheckbox('cu-pay-empty', 'cu-pay-from', 'cu-pay-to', customsFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', refreshCustomsFilterUI); // v2.2.66
+  renderMultiSelect('msel-cu-atd', 'ATD(個別)', 'multi', atdOpts, customsFilter.atdMulti, refreshCustomsFilterUI); // v2.2.146 신규 / v2.2.156: 카스케이드 적용
+  renderMultiSelect('msel-cu-paydate', '支払日(個別)', 'multi', paymentDateOpts, customsFilter.paymentDateMulti, refreshCustomsFilterUI); // v2.2.146 신규 / v2.2.156: 카스케이드 적용
   document.getElementById('cu-reset').onclick = ()=>{
     customsFilter.invoiceNo.selected=[]; customsFilter.bookingNo.selected=[]; customsFilter.forwarder=''; // v2.2.109: forwarder 문자열로 변경
     customsFilter.freeText=''; customsFilter.atdFrom=''; customsFilter.atdTo='';
@@ -8545,7 +8828,7 @@ function initCustomsTab(){
   document.getElementById('btn-live-load-cs').onclick = ()=> loadLiveSales(FETCH_TOP_LIMIT, {errId:'cs-live-err', warnId:'cs-live-warn', btnId:'btn-live-load-cs'}); // v2.2.124 신규
   wireFetchPeriodSync('live-atd-from-cs', 'live-atd-to-cs', false); // v2.2.126: 売上系 그룹
 
-  renderCustomsTable();
+  refreshCustomsFilterUI(); // v2.2.156: 초기 표시부터 카스케이드 옵션 재계산 적용
 }
 
 function renderCustomsTable(){
@@ -8828,6 +9111,71 @@ const maritimeFilter = {
 };
 let maritimeSelectedInvoices = new Set(); // v2.2.83: 복수선택 지원(전체선택/개별체크 → 일괄편집)
 
+/* v2.2.156 신규: カスケード(連動)フィルタ — 売上タブと同一パターン(§commissionMatchesExcept 참조).
+   사용자 요청("검색조건을 넣었을때 다른 항목들이 그 검색조건에 맞는 조건들만 표시될 수 있도록")
+   반영 — 스크린샷으로 지적된 海上運賃タブ부터 적용. */
+function maritimeMatchesExcept(b, exceptDim){
+  const f = maritimeFilter;
+  if(exceptDim!=='pol' && f.pol && b.pol !== f.pol) return false;
+  if(exceptDim!=='pod' && f.pod && b.pod !== f.pod) return false;
+  if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
+  if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
+  if(exceptDim!=='blNumber' && f.blNumber.selected.length && !f.blNumber.selected.includes(b.blNumber)) return false;
+  if(exceptDim!=='carrier' && f.carrier && !(b.carrier||'').includes(f.carrier)) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+  if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
+  if(exceptDim!=='paymentRange' && !matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
+  if(exceptDim!=='atdMulti' && f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
+  if(exceptDim!=='paymentDateMulti' && f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.maritimePaymentDate)) return false;
+  return true;
+}
+
+function computeMaritimeOptions(dim){
+  const matches = bookings.filter(b=>maritimeMatchesExcept(b, dim));
+  switch(dim){
+    case 'pol':              return uniq(matches.map(b=>b.pol)).sort();
+    case 'pod':              return uniq(matches.map(b=>b.pod)).sort();
+    case 'invoiceNo':        return uniq(matches.map(b=>b.invoiceNo)).sort();
+    case 'bookingNo':        return uniq(matches.map(b=>b.bookingNo)).sort();
+    case 'blNumber':         return uniq(matches.map(b=>b.blNumber)).sort();
+    case 'atdMulti':         return uniq(matches.map(b=>b.atd).filter(Boolean)).sort().reverse();
+    case 'paymentDateMulti': return uniq(matches.map(b=>b.maritimePaymentDate).filter(Boolean)).sort().reverse();
+    default: return [];
+  }
+}
+
+/* すべてのフィルタUI（選択肢+選択状態）を、現在の他条件に合わせて再計算・再描画する */
+function refreshMaritimeFilterUI(){
+  const f = maritimeFilter;
+  const polOptions         = computeMaritimeOptions('pol');
+  const podOptions         = computeMaritimeOptions('pod');
+  const invoiceOptions     = computeMaritimeOptions('invoiceNo');
+  const bookingOptions     = computeMaritimeOptions('bookingNo');
+  const blNumberOptions    = computeMaritimeOptions('blNumber');
+  const atdOptions         = computeMaritimeOptions('atdMulti');
+  const paymentDateOptions = computeMaritimeOptions('paymentDateMulti');
+
+  // 이제 유효하지 않은(다른 조건과 겹치지 않는) 기존 선택값은 자동으로 정리
+  // (船社는 部分一致 候補表示 텍스트 입력이라 완全一致 옵션 목록 기반 자동클리어 대상에서 제외 — 売上タブ의 買主/海上運賃タブ 기존 mt-carrier와 동일한 처리 방식)
+  if(f.pol && !polOptions.includes(f.pol)) f.pol = '';
+  if(f.pod && !podOptions.includes(f.pod)) f.pod = '';
+  f.invoiceNo.selected = f.invoiceNo.selected.filter(v=>invoiceOptions.includes(v));
+  f.bookingNo.selected = f.bookingNo.selected.filter(v=>bookingOptions.includes(v));
+  f.blNumber.selected = f.blNumber.selected.filter(v=>blNumberOptions.includes(v));
+  f.atdMulti.selected = f.atdMulti.selected.filter(v=>atdOptions.includes(v));
+  f.paymentDateMulti.selected = f.paymentDateMulti.selected.filter(v=>paymentDateOptions.includes(v));
+
+  renderMultiSelect('msel-mt-invoice', 'Invoice No', 'multi', invoiceOptions, f.invoiceNo, refreshMaritimeFilterUI);
+  renderMultiSelect('msel-mt-booking', 'Booking No', 'multi', bookingOptions, f.bookingNo, refreshMaritimeFilterUI);
+  renderMultiSelect('msel-mt-blnumber', 'B/L No.', 'multi', blNumberOptions, f.blNumber, refreshMaritimeFilterUI);
+  rebuildSelect('mt-pol', polOptions, f.pol);
+  rebuildSelect('mt-pod', podOptions, f.pod);
+  renderMultiSelect('msel-mt-atd', 'ATD(個別)', 'multi', atdOptions, f.atdMulti, refreshMaritimeFilterUI);
+  renderMultiSelect('msel-mt-paydate', '支払日(個別)', 'multi', paymentDateOptions, f.paymentDateMulti, refreshMaritimeFilterUI);
+
+  renderMaritimeTable();
+}
+
 function initMaritimeTab(){
   const panel = document.getElementById('panel-maritime');
   const invoiceOpts = uniq(bookings.map(b=>b.invoiceNo)).sort();
@@ -8946,21 +9294,21 @@ function initMaritimeTab(){
     e.target.textContent = grid.classList.contains('collapsed') ? '▼' : '▲';
   };
 
-  wireFreeTextAutocomplete('mt-carrier', q=>freeTextCandidates(bookings, ['carrier'], q), v=>{ maritimeFilter.carrier = v; renderMaritimeTable(); }); // v2.2.105: 複数選択→候補表示 単一입력으로 변경
-  renderMultiSelect('msel-mt-invoice', 'Invoice No', 'multi', invoiceOpts, maritimeFilter.invoiceNo, renderMaritimeTable);
-  renderMultiSelect('msel-mt-booking', 'Booking No', 'multi', bookingOpts, maritimeFilter.bookingNo, renderMaritimeTable);
-  renderMultiSelect('msel-mt-blnumber', 'B/L No.', 'multi', blNumberOpts, maritimeFilter.blNumber, renderMaritimeTable); // v2.2.104 신규
+  wireFreeTextAutocomplete('mt-carrier', q=>freeTextCandidates(bookings, ['carrier'], q), v=>{ maritimeFilter.carrier = v; refreshMaritimeFilterUI(); }); // v2.2.105: 複数選択→候補表示 単一입력으로 변경 / v2.2.156: 카스케이드 적용
+  renderMultiSelect('msel-mt-invoice', 'Invoice No', 'multi', invoiceOpts, maritimeFilter.invoiceNo, refreshMaritimeFilterUI);
+  renderMultiSelect('msel-mt-booking', 'Booking No', 'multi', bookingOpts, maritimeFilter.bookingNo, refreshMaritimeFilterUI);
+  renderMultiSelect('msel-mt-blnumber', 'B/L No.', 'multi', blNumberOpts, maritimeFilter.blNumber, refreshMaritimeFilterUI); // v2.2.104 신규 / v2.2.156: 카스케이드 적용
 
-  wireFreeTextAutocomplete('mt-freetext', q=>freeTextCandidates(bookings, ['invoiceNo','bookingNo'], q), v=>{ maritimeFilter.freeText = v; renderMaritimeTable(); }); // v2.2.77 신규
-  document.getElementById('mt-pol').onchange = (e)=>{ maritimeFilter.pol = e.target.value; renderMaritimeTable(); };
-  document.getElementById('mt-pod').onchange = (e)=>{ maritimeFilter.pod = e.target.value; renderMaritimeTable(); };
-  document.getElementById('mt-atd-from').onchange = (e)=>{ maritimeFilter.atdFrom = e.target.value; renderMaritimeTable(); };
-  document.getElementById('mt-atd-to').onchange   = (e)=>{ maritimeFilter.atdTo = e.target.value; renderMaritimeTable(); };
-  document.getElementById('mt-pay-from').onchange = (e)=>{ maritimeFilter.paymentFrom = e.target.value; renderMaritimeTable(); };
-  document.getElementById('mt-pay-to').onchange   = (e)=>{ maritimeFilter.paymentTo = e.target.value; renderMaritimeTable(); };
-  wireEmptyOnlyCheckbox('mt-pay-empty', 'mt-pay-from', 'mt-pay-to', maritimeFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', renderMaritimeTable); // v2.2.66
-  renderMultiSelect('msel-mt-atd', 'ATD(個別)', 'multi', atdOpts, maritimeFilter.atdMulti, renderMaritimeTable); // v2.2.146 신규
-  renderMultiSelect('msel-mt-paydate', '支払日(個別)', 'multi', paymentDateOpts, maritimeFilter.paymentDateMulti, renderMaritimeTable); // v2.2.146 신규
+  wireFreeTextAutocomplete('mt-freetext', q=>freeTextCandidates(bookings, ['invoiceNo','bookingNo'], q), v=>{ maritimeFilter.freeText = v; refreshMaritimeFilterUI(); }); // v2.2.77 신규
+  document.getElementById('mt-pol').onchange = (e)=>{ maritimeFilter.pol = e.target.value; refreshMaritimeFilterUI(); };
+  document.getElementById('mt-pod').onchange = (e)=>{ maritimeFilter.pod = e.target.value; refreshMaritimeFilterUI(); };
+  document.getElementById('mt-atd-from').onchange = (e)=>{ maritimeFilter.atdFrom = e.target.value; refreshMaritimeFilterUI(); };
+  document.getElementById('mt-atd-to').onchange   = (e)=>{ maritimeFilter.atdTo = e.target.value; refreshMaritimeFilterUI(); };
+  document.getElementById('mt-pay-from').onchange = (e)=>{ maritimeFilter.paymentFrom = e.target.value; refreshMaritimeFilterUI(); };
+  document.getElementById('mt-pay-to').onchange   = (e)=>{ maritimeFilter.paymentTo = e.target.value; refreshMaritimeFilterUI(); };
+  wireEmptyOnlyCheckbox('mt-pay-empty', 'mt-pay-from', 'mt-pay-to', maritimeFilter, 'paymentFrom', 'paymentTo', 'paymentEmpty', refreshMaritimeFilterUI); // v2.2.66
+  renderMultiSelect('msel-mt-atd', 'ATD(個別)', 'multi', atdOpts, maritimeFilter.atdMulti, refreshMaritimeFilterUI); // v2.2.146 신규 / v2.2.156: 카스케이드 적용
+  renderMultiSelect('msel-mt-paydate', '支払日(個別)', 'multi', paymentDateOpts, maritimeFilter.paymentDateMulti, refreshMaritimeFilterUI); // v2.2.146 신규 / v2.2.156: 카스케이드 적용
   document.getElementById('mt-reset').onclick = ()=>{
     maritimeFilter.pol=''; maritimeFilter.pod=''; maritimeFilter.carrier=''; // v2.2.105: carrier는 문자열이므로 ''로 초기화
     maritimeFilter.invoiceNo.selected=[]; maritimeFilter.bookingNo.selected=[]; maritimeFilter.blNumber.selected=[];
@@ -8985,7 +9333,7 @@ function initMaritimeTab(){
   document.getElementById('btn-live-load-mt').onclick = ()=> loadLiveSales(FETCH_TOP_LIMIT, {errId:'mt-live-err', warnId:'mt-live-warn', btnId:'btn-live-load-mt'}); // v2.2.124 신규
   wireFetchPeriodSync('live-atd-from-mt', 'live-atd-to-mt', false); // v2.2.126: 売上系 그룹
 
-  renderMaritimeTable();
+  refreshMaritimeFilterUI(); // v2.2.156: 초기 표시부터 카스케이드 옵션 재계산 적용
 }
 
 function renderMaritimeTable(){
