@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.157 (2026-09-02)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.158 (2026-09-02)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.157 (2026-09-02) ｜ 🐛 候補表示部分一致フィルタの大文字小文字不一致修正</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.158 (2026-09-02) ｜ フリー検索(部分一致)の大文字小文字無視に拡張</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3595,6 +3595,31 @@
        v2.2.156 baseline과 완전히 일치(마크업 변경 없음, `<script>` 내부에 공용 함수
        1개 신규 추가 + 기존 비교식 7곳 교체만). `✦ Powered by LEENAI Automation System`
        문구 실사용 위치 전부 변경 없음 유지 확인.
+   v2.2.158 (2026-09-02) : ✨ フリー検索(Invoice No/Booking No 등 부분일치) 필드도
+     대소문자 무시 비교로 확장
+     (사용자 요청 — v2.2.157에서 범위 밖으로 남겨두었던 항목, "Invoice No/Booking No 같은
+     프리텍스트 검색의 대소문자 처리 확장 해 주세요")
+     - **수정**: v2.2.157에서 신규 추가한 `partialMatch(value, query)` 공용 함수를
+       フリー検索(freeText) 필드에도 동일하게 적용. 대상 6개 탭 총 16곳(각 필드가
+       `matchesExcept`/`render*Table`/`export*Excel` 3곳에 중복 구현되어 있음, 売上탭만
+       `bookingMatchesExcept()` 재사용 구조라 1곳):
+       - 売上(1곳): Invoice No + Booking No
+       - Commission(3곳): Invoice No + 販売CO(saleCO)
+       - 仕入(3곳): Invoice No + Booking No + Container No
+       - 運送料(3곳): Invoice No + Booking No + Container No
+       - 通関(3곳): Invoice No + Booking No
+       - 海上運賃(3곳): Invoice No + Booking No
+     - **효과**: 자동완성 후보 목록(`freeTextCandidates()`, 기존부터 대소문자 무시)과
+       실제 필터링(카스케이드 재계산 포함) 비교 방식이 6개 탭 전 필드에서 완전히 일치하게
+       됨 — v2.2.157에서 수정한 候補表示 필드(船社/購買元/販売先)와 동일한 원칙을
+       フリー検索 필드까지 확장 적용.
+     - **범위 밖(변경 없음)**: Invoice No/Booking No/B/L No. 등 멀티셀렉트(체크박스) 필터는
+       원래부터 목록에서 골라 선택하는 방식이라(자유 텍스트 입력이 아님) 대소문자 문제
+       자체가 발생하지 않으므로 대상에서 제외.
+     - **문법/전체 검토**: 수정 후 `node --check`로 JS 문법 오류 없음 확인. HTML 태그 짝
+       v2.2.157 baseline과 완전히 일치(마크업 변경 없음, 기존 비교식 16곳을
+       `partialMatch()` 호출로 교체만). `✦ Powered by LEENAI Automation System` 문구
+       실사용 위치 전부 변경 없음 유지 확인.
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -5489,7 +5514,7 @@ function bookingMatchesExcept(b, exceptDim){
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
   if(exceptDim!=='packer' && f.packer.selected.length && !f.packer.selected.includes(b.packer)) return false;
   if(exceptDim!=='saleCO' && f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false; // v2.2.90 신규
-  if(exceptDim!=='freeText' && f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
   if(exceptDim!=='buyer' && f.buyer && !partialMatch(b.buyer, f.buyer)) return false; // v2.2.106: 完全一致→部分一致(候補表示型) / v2.2.157: 대소문자 무시 비교로 수정
   if(exceptDim!=='bankName' && f.bankName && b.bankName !== f.bankName) return false;
   if(exceptDim!=='conditionType' && f.conditionType && b.conditionType !== f.conditionType) return false;
@@ -7272,7 +7297,7 @@ function commissionMatchesExcept(b, exceptDim){
   if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
   if(exceptDim!=='saleCO' && f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false;
   if(exceptDim!=='agent' && f.agent.selected.length && !f.agent.selected.includes(b.agent)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(b.invoiceNo.includes(f.freeText) || b.saleCO.includes(f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.saleCO, f.freeText))) return false;
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(b.agentPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
   if(exceptDim!=='paymentDateMulti' && f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false;
@@ -7463,7 +7488,7 @@ function renderCommissionTable(){
     if(f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false;
     if(f.agent.selected.length && !f.agent.selected.includes(b.agent)) return false;
     if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
-    if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.saleCO.includes(f.freeText))) return false;
+    if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.saleCO, f.freeText))) return false;
     if(!matchDateField(b.agentPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
     if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false; // v2.2.146 신규
     return true;
@@ -7529,7 +7554,7 @@ async function exportCommissionExcel(){ // v2.2.138 신규
       if(f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false;
       if(f.agent.selected.length && !f.agent.selected.includes(b.agent)) return false;
       if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
-      if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.saleCO.includes(f.freeText))) return false;
+      if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.saleCO, f.freeText))) return false;
       if(!matchDateField(b.agentPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
       if(f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false; // v2.2.154 수정: renderCommissionTable()과 동일한 支払日(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
       return true;
@@ -7717,7 +7742,7 @@ function purchaseMatchesExcept(c, exceptDim){
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
   if(exceptDim!=='containerNo' && f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
   if(exceptDim!=='packer' && f.packer && !partialMatch(c.packer, f.packer)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(c.invoiceNo.includes(f.freeText) || c.bookingNo.includes(f.freeText) || c.containerNo.includes(f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='workRange' && (f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(c.paymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
@@ -7955,7 +7980,7 @@ function renderPurchaseTable(){
     if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
     if(f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
     if(f.packer && !partialMatch(c.packer, f.packer)) return false; // v2.2.107: 完全一致(複数選択)→部分一致(候補表示型) / v2.2.157: 대소문자 무시 비교로 수정
-    if(f.freeText && !(c.invoiceNo.includes(f.freeText) || c.bookingNo.includes(f.freeText) || c.containerNo.includes(f.freeText))) return false;
+    if(f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
     if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
     if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
     if(!matchDateField(c.paymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
@@ -8024,7 +8049,7 @@ async function exportPurchaseExcel(){ // v2.2.138 신규
       if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
       if(f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
       if(f.packer && !partialMatch(c.packer, f.packer)) return false; // v2.2.157: 대소문자 무시 비교로 수정
-      if(f.freeText && !(c.invoiceNo.includes(f.freeText) || c.bookingNo.includes(f.freeText) || c.containerNo.includes(f.freeText))) return false;
+      if(f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
       if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
       if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
       if(!matchDateField(c.paymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
@@ -8214,7 +8239,7 @@ function drayMatchesExcept(c, exceptDim){
   if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
   if(exceptDim!=='containerNo' && f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(c.invoiceNo.includes(f.freeText) || c.bookingNo.includes(f.freeText) || c.containerNo.includes(f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='workRange' && (f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(c.drayPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
@@ -8437,7 +8462,7 @@ function renderDrayTable(){
     if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
     if(f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
     if(f.vendor && c.drayVendor !== f.vendor) return false; // v2.2.108: 複数選択(완전일치 OR)→単一選択(완전일치)로 변경
-    if(f.freeText && !(c.invoiceNo.includes(f.freeText) || c.bookingNo.includes(f.freeText) || c.containerNo.includes(f.freeText))) return false;
+    if(f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
     if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
     if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
     if(!matchDateField(c.drayPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
@@ -8505,7 +8530,7 @@ async function exportDrayExcel(){ // v2.2.138 신규
       if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
       if(f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
       if(f.vendor && c.drayVendor !== f.vendor) return false;
-      if(f.freeText && !(c.invoiceNo.includes(f.freeText) || c.bookingNo.includes(f.freeText) || c.containerNo.includes(f.freeText))) return false;
+      if(f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
       if((f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
       if((f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
       if(!matchDateField(c.drayPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
@@ -8690,7 +8715,7 @@ function customsMatchesExcept(b, exceptDim){
   if(exceptDim!=='forwarder' && f.forwarder && b.forwarder !== f.forwarder) return false;
   if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(b.customPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
   if(exceptDim!=='atdMulti' && f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
@@ -8880,7 +8905,7 @@ function renderCustomsTable(){
     if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
     if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
     if(f.forwarder && b.forwarder !== f.forwarder) return false; // v2.2.109: 複数選択(완전일치 OR)→単一選択(완전일치)로 변경
-    if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+    if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
     if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
     if(!matchDateField(b.customPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
     if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.146 신규
@@ -8966,7 +8991,7 @@ async function exportCustomsExcel(){ // v2.2.138 신규
       if(f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
       if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
       if(f.forwarder && b.forwarder !== f.forwarder) return false;
-      if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+      if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
       if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
       if(!matchDateField(b.customPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
       if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.155 수정: renderCustomsTable()과 동일한 ATD(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
@@ -9165,7 +9190,7 @@ function maritimeMatchesExcept(b, exceptDim){
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
   if(exceptDim!=='blNumber' && f.blNumber.selected.length && !f.blNumber.selected.includes(b.blNumber)) return false;
   if(exceptDim!=='carrier' && f.carrier && !partialMatch(b.carrier, f.carrier)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
   if(exceptDim!=='atdMulti' && f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
@@ -9388,7 +9413,7 @@ function renderMaritimeTable(){
     if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
     if(f.blNumber.selected.length && !f.blNumber.selected.includes(b.blNumber)) return false;
     if(f.carrier && !partialMatch(b.carrier, f.carrier)) return false; // v2.2.105: 複数選択(OR)→部分一致 単一입력으로 변경 / v2.2.157: 대소문자 무시 비교로 수정
-    if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+    if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
     if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
     if(!matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
     if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.146 신규
@@ -9491,7 +9516,7 @@ async function exportMaritimeExcel(){ // v2.2.138 신규
       if(f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
       if(f.blNumber.selected.length && !f.blNumber.selected.includes(b.blNumber)) return false;
       if(f.carrier && !partialMatch(b.carrier, f.carrier)) return false; // v2.2.157: 대소문자 무시 비교로 수정
-      if(f.freeText && !(b.invoiceNo.includes(f.freeText) || b.bookingNo.includes(f.freeText))) return false;
+      if(f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
       if((f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
       if(!matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
       if(f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false; // v2.2.155 수정: renderMaritimeTable()과 동일한 ATD(個別) 필터 추가(v2.2.146에서 render에만 추가되고 export에는 빠져있던 것을 보완)
