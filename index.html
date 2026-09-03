@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.159 (2026-09-02)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.160 (2026-09-03)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.159 (2026-09-02) ｜ render/export フィルタ重複ロジックの共通化リファクタリング</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.160 (2026-09-03) ｜ Excel出力フォントをCentury Gothic/9ptに統一</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3650,6 +3650,24 @@
        v2.2.158 baseline과 완전히 일치(마크업 변경 없음, `<script>` 내부 JS 로직만
        교체). `✦ Powered by LEENAI Automation System` 문구 실사용 위치(화면 4곳 +
        Excel/PDF 출력 코드 2곳) 전부 변경 없음 유지 확인.
+   v2.2.160 (2026-09-03) : 🔤 Excel出力 폰트를 Century Gothic / 9pt로 통일
+     (사용자 요청 — "각 탭의 엑셀내보내기의 엑셀파일의 폰트를 Century Gothic과 글씨크기를
+     9로 해주세요")
+     - **핵심 변경**: 全タブ(売上/Commission/仕入/運送料/通関/海上運賃) Excel出力이 전부
+       공용 함수 `buildExcelTableWorkbook()` 1곳을 거치는 구조(v2.2.138 이후)이므로, 이
+       함수 안에만 공용 폰트 상수 `EXCEL_EXPORT_FONT = { name:'Century Gothic', size:9 }`를
+       신규 추가하고, 테이블/헤더 생성 직후 `sheet.eachRow()`로 헤더行·데이터行·footer
+       (`✦ Powered by LEENAI Automation System` 문구) 전체 셀에 일괄 적용. 탭별
+       `export*Excel()` 함수는 전혀 손대지 않음(공용 함수 1곳 수정만으로 6탭 전부 반영).
+     - **효과**: 앞으로 폰트를 변경할 때도 `EXCEL_EXPORT_FONT` 상수 1곳만 고치면 6탭
+       전부에 자동 반영됨.
+     - **범위 밖(변경 없음)**: `TableStyleMedium9` 테이블 스타일(줄무늬·헤더 필터버튼 등
+       시각효과)·컬럼 너비·필터 로직·화면 표시(render*Table)·집계바·ブランディング 문구
+       위치는 전부 기존과 동일.
+     - **문법/전체 검토**: `node --check`로 JS 문법 오류 없음 확인. HTML 태그 짝
+       v2.2.159 baseline과 완전히 일치(마크업 변경 없음, `<script>` 내부 JS 함수 1곳만
+       수정). `✦ Powered by LEENAI Automation System` 문구 실사용 위치(화면 4곳 +
+       Excel/PDF 출력 코드 2곳) 전부 변경 없음 유지 확인.
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -6187,6 +6205,8 @@ function ensureExcelJSLoaded(){ // v2.2.138 신규: SheetJS(xlsx)→ExcelJS로 �
   return exceljsLoadPromise;
 }
 
+const EXCEL_EXPORT_FONT = { name: 'Century Gothic', size: 9 }; // v2.2.160 신규: 全タブ Excel出力 공용 폰트 설정(사용자 요청 — Century Gothic / 9pt)
+
 function buildExcelTableWorkbook(sheetName, tableName, header, rows){ // v2.2.138 신규: 全タブ 공용 — 실제 Excelテーブル(ListObject)을 가진 워크북 생성
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(sheetName);
@@ -6203,6 +6223,14 @@ function buildExcelTableWorkbook(sheetName, tableName, header, rows){ // v2.2.13
   header.forEach((h,i)=>{ sheet.getColumn(i+1).width = Math.max(10, String(h).length + 2); });
   const footerRowNum = Math.max(rows.length, 0) + 3;
   sheet.getCell(`A${footerRowNum}`).value = '✦ Powered by LEENAI Automation System';
+  // v2.2.160 신규: 헤더行/데이터行/footer 전체 셀에 공용 폰트(Century Gothic, 9pt) 일괄 적용
+  // (addTable()의 테이블 스타일(TableStyleMedium9)이 주는 굵기·줄무늬 등 시각효과는
+  // 폰트 패밀리와 무관하게 유지되므로 폰트만 덮어써도 기존 표시(重複除去 표시 등)에는 영향 없음)
+  sheet.eachRow({ includeEmpty: false }, row=>{
+    row.eachCell({ includeEmpty: false }, cell=>{
+      cell.font = Object.assign({}, cell.font, EXCEL_EXPORT_FONT);
+    });
+  });
   return workbook;
 }
 
