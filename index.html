@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.161 (2026-09-03)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.162 (2026-09-03)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.161 (2026-09-03) ｜ Excel出力テーブルスタイルをTableStyleLight2に変更</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.162 (2026-09-03) ｜ Excel出力 数値表示形式をPower Queryファイルに統一</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3681,6 +3681,32 @@
        v2.2.160 baseline과 완전히 일치(마크업 변경 없음, `<script>` 내부 문자열 값
        1곳만 교체). `✦ Powered by LEENAI Automation System` 문구 실사용 위치(화면
        4곳 + Excel/PDF 출력 코드 2곳) 전부 변경 없음 유지 확인.
+   v2.2.162 (2026-09-03) : 🔢 Excel出力 숫자 표시형식을 Power Query 파일 기준으로 6탭 전체 통일
+     (사용자 요청 — Power Query로 만든 COMPASS_売上.xlsx와 accounting Excel出力 사이에
+     소수점 표시가 달라 보인다는 문의. 두 파일을 invoice_no 기준·전체 합계 기준으로
+     대조 분석한 결과 실제 저장값은 135건 전부 · 전체 합계까지 완전히 일치했고, 차이는
+     PQ 파일의 고정 셀 서식(重量 2자리 `#,##0.00`, USD 2자리 `$#,##0.00`, JPY 정수
+     `¥#,##0`) vs accounting Excel의 `General` 서식 간 표시 차이로 확인됨. "6개 탭 전부
+     동일 규칙으로 통일해주세요"로 확정)
+     - **핵심 변경**: `buildExcelTableWorkbook()`/`runExcelExport()`에 `colFormats`
+       (헤더명→numFmt 매핑) 인자를 신규 추가해 컬럼별 표시 서식을 지정할 수 있게 하고,
+       6개 탭 전부(売上/Commission/仕入/運送料/通関/海上運賃)의 `export*Excel()`에
+       해당 탭의 重量·USD·JPY 총액 컬럼에 맞는 `colFormats`를 추가:
+       - 重量(MT)/重量 컬럼 → `#,##0.00`(소수점 2자리, PQ 파일과 동일)
+       - USD 총액 컬럼(売上$/S.cms$/運賃USD) → `#,##0.00`(소수점 2자리)
+       - JPY 총액 컬럼(売上¥/S.cms¥/仕入/費用/高速代/通関料/手数料·費用(税抜·税込)/
+         運賃JPY/Doc(税抜·税込)/bl_etc(税抜·税込)/Total(税抜·税込)/本数) → `#,##0`(정수)
+     - **의도적으로 제외(General 유지)**: `Ex.`(환율)·`Commission`(수수료율)·
+       `B.unit ¥/KG`(kg당 단가)·`bl_rate`(운임단가)·`bl_etc`/`Seal`(성격 불명확) —
+       비율·단가 계열은 반올림 시 정보손실 위험이 있어 사용자 확인 없이 임의 반올림하지
+       않음(§5 원칙).
+     - **범위 밖(변경 없음)**: 실제 데이터 값·필터 로직·테이블 스타일(TableStyleLight2)·
+       폰트(Century Gothic/9pt)·컬럼 너비·ブランディング 문구는 전부 기존과 동일.
+     - **문법/전체 검토**: `node --check`로 JS 문법 오류 없음 확인. HTML 태그 짝
+       v2.2.161 baseline과 완전히 일치(마크업 변경 없음, `<script>` 내부 함수 시그니처
+       확장 + 6개 export 함수에 colFormats 추가만). `✦ Powered by LEENAI Automation
+       System` 문구 실사용 위치(화면 4곳 + Excel/PDF 출력 코드 2곳) 전부 변경 없음
+       유지 확인.
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -6220,7 +6246,7 @@ function ensureExcelJSLoaded(){ // v2.2.138 신규: SheetJS(xlsx)→ExcelJS로 �
 
 const EXCEL_EXPORT_FONT = { name: 'Century Gothic', size: 9 }; // v2.2.160 신규: 全タブ Excel出力 공용 폰트 설정(사용자 요청 — Century Gothic / 9pt)
 
-function buildExcelTableWorkbook(sheetName, tableName, header, rows){ // v2.2.138 신규: 全タブ 공용 — 실제 Excelテーブル(ListObject)을 가진 워크북 생성
+function buildExcelTableWorkbook(sheetName, tableName, header, rows, colFormats){ // v2.2.138 신규, v2.2.162: colFormats(선택) 인자 추가 — 全タブ 공용 — 실제 Excelテーブル(ListObject)을 가진 워크북 생성
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(sheetName);
   if(rows.length){
@@ -6234,6 +6260,18 @@ function buildExcelTableWorkbook(sheetName, tableName, header, rows){ // v2.2.13
     header.forEach((h,i)=>{ sheet.getCell(1, i+1).value = h; });
   }
   header.forEach((h,i)=>{ sheet.getColumn(i+1).width = Math.max(10, String(h).length + 2); });
+  // v2.2.162 신규: Power Query 파일(COMPASS_売上.xlsx)의 표시 서식(重量 2자리·USD 2자리·JPY 정수)에
+  // 맞춰 컬럼별 numFmt 적용(사용자 요청 — "accounting엑셀에 Power Query로 만든 엑셀을 맞추고 싶다").
+  // colFormats는 { 헤더명: numFmt문자열 } 형태이며, 지정 안 된 컬럼(환율·단가·비율 등)은
+  // 기존과 동일하게 General 그대로 유지(반올림에 따른 정보손실 방지 — §5 참조).
+  if(colFormats && rows.length){
+    header.forEach((h,i)=>{
+      const fmt = colFormats[h];
+      if(!fmt) return;
+      const col = sheet.getColumn(i+1);
+      col.numFmt = fmt;
+    });
+  }
   const footerRowNum = Math.max(rows.length, 0) + 3;
   sheet.getCell(`A${footerRowNum}`).value = '✦ Powered by LEENAI Automation System';
   // v2.2.160 신규: 헤더行/데이터行/footer 전체 셀에 공용 폰트(Century Gothic, 9pt) 일괄 적용
@@ -6262,8 +6300,8 @@ function excelTimestamp(){ // v2.2.138 신규: 파일명용 타임스탬프(全�
   return `${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}_${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}`;
 }
 
-async function runExcelExport(btnId, buildRowsFn, sheetName, tableName, filenamePrefix){ // v2.2.138 신규: 全タブ 공용 export 실행기(버튼 비활성화·에러 처리 공통화)
-  const { header, rows } = buildRowsFn();
+async function runExcelExport(btnId, buildRowsFn, sheetName, tableName, filenamePrefix){ // v2.2.138 신규, v2.2.162: buildRowsFn이 반환하는 colFormats(선택)를 buildExcelTableWorkbook에 전달 — 全タブ 공용 export 실행기(버튼 비활성화·에러 처리 공통화)
+  const { header, rows, colFormats } = buildRowsFn();
   if(!rows.length){ alert('出力するデータがありません（検索条件を確認してください）。'); return; }
 
   const btn = document.getElementById(btnId);
@@ -6277,7 +6315,7 @@ async function runExcelExport(btnId, buildRowsFn, sheetName, tableName, filename
     return;
   }
   try{
-    const workbook = buildExcelTableWorkbook(sheetName, tableName, header, rows);
+    const workbook = buildExcelTableWorkbook(sheetName, tableName, header, rows, colFormats);
     await downloadWorkbookAsXlsx(workbook, `COMPASS_${filenamePrefix}_${excelTimestamp()}.xlsx`);
   }catch(e){
     alert('❌ Excelファイルの生成に失敗しました。');
@@ -6285,7 +6323,7 @@ async function runExcelExport(btnId, buildRowsFn, sheetName, tableName, filename
   if(btn){ btn.disabled = false; btn.textContent = origLabel; }
 }
 
-async function exportSalesExcel(){ // v2.2.134 신규, v2.2.138: ExcelJS(実テーブル) 기반으로 재작성
+async function exportSalesExcel(){ // v2.2.134 신규, v2.2.138: ExcelJS(実テーブル) 기반으로 재작성, v2.2.162: colFormats 추가(重量/売上$/売上¥/条件契約日数)
   await runExcelExport('btn-sales-excel', ()=>{
     const rows = applySorting(bookings.filter(b=>bookingMatchesExcept(b, null)), 'sales');
     const header = ['ATD','Invoice No.','Booking No.','販売先','購買元','Ex.','重量(MT)','売上$','売上¥',
@@ -6296,7 +6334,8 @@ async function exportSalesExcel(){ // v2.2.134 신규, v2.2.138: ExcelJS(実テ�
       b.bankName||'', b.bankSubmitDate||'', b.purchaseStatus||'', b.conditionType||'',
       (b.conditionDays ?? ''), b.expectedPaymentDate||'', b.paymentDate||'', b.updatedAt||'', b.updatedBy||''
     ]);
-    return { header, rows: data };
+    const colFormats = { '重量(MT)':'#,##0.00', '売上$':'#,##0.00', '売上¥':'#,##0', '条件契約日数':'#,##0' };
+    return { header, rows: data, colFormats };
   }, '売上', 'SalesTable', '売上');
 }
 
@@ -7622,7 +7661,7 @@ function renderCommissionTable(){
   });
 }
 
-async function exportCommissionExcel(){ // v2.2.138 신규
+async function exportCommissionExcel(){ // v2.2.138 신규, v2.2.162: colFormats 추가(重量/S.cms$/S.cms¥)
   await runExcelExport('btn-cm-excel', ()=>{
     let rows = bookings.filter(b=>commissionMatchesExcept(b, null)); // v2.2.159 리팩터링: renderCommissionTable()과 동일한 commissionMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.154에서 발생했던 필드 누락 버그 재발 원천 차단)
     rows = applySorting(rows, 'commission');
@@ -7633,7 +7672,8 @@ async function exportCommissionExcel(){ // v2.2.138 신규
       (b.commissionAmountUsd ?? ''), (b.commissionAmountYen ?? ''),
       b.agentPaymentDate||'', b.updatedAt||'', b.updatedBy||''
     ]);
-    return { header, rows: data };
+    const colFormats = { '重量':'#,##0.00', 'S.cms$':'#,##0.00', 'S.cms¥':'#,##0' };
+    return { header, rows: data, colFormats };
   }, 'Commission', 'CommissionTable', 'Commission');
 }
 
@@ -8088,7 +8128,7 @@ function renderPurchaseTable(){
   });
 }
 
-async function exportPurchaseExcel(){ // v2.2.138 신규
+async function exportPurchaseExcel(){ // v2.2.138 신규, v2.2.162: colFormats 추가(重量/仕入)
   await runExcelExport('btn-pc-excel', ()=>{
     let rows = purchaseContainers.filter(c=>purchaseMatchesExcept(c, null)); // v2.2.159 리팩터링: renderPurchaseTable()과 동일한 purchaseMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.155에서 발생했던 필드 누락 버그 재발 원천 차단)
     rows = applySorting(rows, 'purchase');
@@ -8099,7 +8139,8 @@ async function exportPurchaseExcel(){ // v2.2.138 신규
       (c.unitPricePerKg ?? ''), (c.netWeightMt ?? ''), (c.purchaseAmount ?? ''),
       c.paymentDate||'', c.updatedAt||'', c.updatedBy||''
     ]);
-    return { header, rows: data };
+    const colFormats = { '重量':'#,##0.00', '仕入':'#,##0' };
+    return { header, rows: data, colFormats };
   }, '仕入', 'PurchaseTable', '仕入');
 }
 
@@ -8541,7 +8582,7 @@ function renderDrayTable(){
   });
 }
 
-async function exportDrayExcel(){ // v2.2.138 신규
+async function exportDrayExcel(){ // v2.2.138 신규, v2.2.162: colFormats 추가(重量/費用/高速代)
   await runExcelExport('btn-dr-excel', ()=>{
     let rows = purchaseContainers.filter(c=>drayMatchesExcept(c, null)); // v2.2.159 리팩터링: renderDrayTable()과 동일한 drayMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.155에서 발생했던 필드 누락 버그 재발 원천 차단)
     rows = applySorting(rows, 'dray');
@@ -8551,7 +8592,8 @@ async function exportDrayExcel(){ // v2.2.138 신규
       c.workDate||'', c.containerNo||'', (c.netWeightMt ?? ''), (c.drayCost ?? ''), (c.drayHighway ?? ''),
       c.drayPaymentDate||'', c.drayBlNo||'', c.drayUpdatedAt||'', c.drayUpdatedBy||''
     ]);
-    return { header, rows: data };
+    const colFormats = { '重量':'#,##0.00', '費用':'#,##0', '高速代':'#,##0' };
+    return { header, rows: data, colFormats };
   }, '運送料', 'DrayTable', '運送料');
 }
 
@@ -8974,7 +9016,7 @@ function renderCustomsTable(){
   });
 }
 
-async function exportCustomsExcel(){ // v2.2.138 신규
+async function exportCustomsExcel(){ // v2.2.138 신규, v2.2.162: colFormats 추가(通関料/手数料·費用 税抜税込)
   await runExcelExport('btn-cu-excel', ()=>{
     let rows = bookings.filter(b=>customsMatchesExcept(b, null)); // v2.2.159 리팩터링: renderCustomsTable()과 동일한 customsMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.155에서 발생했던 필드 누락 버그 재발 원천 차단)
     rows = dedupByInvoiceBooking(rows).rows; // v2.2.159 리팩터링: dedup도 공용 함수로 통합
@@ -8986,7 +9028,8 @@ async function exportCustomsExcel(){ // v2.2.138 신규
       (b.customsTotal ?? ''), (b.customsTotalTax ?? ''),
       b.customPaymentDate||'', b.updatedAt||'', b.updatedBy||''
     ]);
-    return { header, rows: data };
+    const colFormats = { '通関料':'#,##0', '手数料(税抜)':'#,##0', '手数料(税込)':'#,##0', '費用(税抜)':'#,##0', '費用(税込)':'#,##0' };
+    return { header, rows: data, colFormats };
   }, '通関', 'CustomsTable', '通関');
 }
 
@@ -9461,7 +9504,7 @@ function renderMaritimeTable(){
   });
 }
 
-async function exportMaritimeExcel(){ // v2.2.138 신규
+async function exportMaritimeExcel(){ // v2.2.138 신규, v2.2.162: colFormats 추가(本数/運賃USD/運賃JPY/Doc/bl_etc(税抜税込)/Total)
   await runExcelExport('btn-mt-excel', ()=>{
     let rows = bookings.filter(b=>maritimeMatchesExcept(b, null)); // v2.2.159 리팩터링: renderMaritimeTable()과 동일한 maritimeMatchesExcept() 공용 호출로 통합(render/export 중복 제거 — v2.2.155에서 발생했던 필드 누락 버그 재발 원천 차단)
     rows = dedupByInvoiceBooking(rows).rows; // v2.2.159 리팩터링: dedup도 공용 함수로 통합
@@ -9476,7 +9519,13 @@ async function exportMaritimeExcel(){ // v2.2.138 신규
       (b.maritimeTotal ?? ''), (b.maritimeTotalTaxIncl ?? ''),
       b.maritimePaymentDate||'', b.updatedAt||'', b.updatedBy||''
     ]);
-    return { header, rows: data };
+    const colFormats = {
+      '本数':'#,##0', '運賃USD':'#,##0.00', '運賃JPY':'#,##0',
+      'Doc(税抜)':'#,##0', 'Doc(税込)':'#,##0',
+      'bl_etc(税抜)':'#,##0', 'bl_etc(税込)':'#,##0',
+      'Total(税抜)':'#,##0', 'Total(税込)':'#,##0'
+    };
+    return { header, rows: data, colFormats };
   }, '海上運賃', 'MaritimeTable', '海上運賃');
 }
 
