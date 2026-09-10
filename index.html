@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.162 (2026-09-03)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.163 (2026-09-03)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.162 (2026-09-03) ｜ Excel出力 数値表示形式をPower Queryファイルに統一</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.163 (2026-09-03) ｜ 海上運賃タブ フリー検索にB/L No.を追加</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3707,6 +3707,23 @@
        확장 + 6개 export 함수에 colFormats 추가만). `✦ Powered by LEENAI Automation
        System` 문구 실사용 위치(화면 4곳 + Excel/PDF 출력 코드 2곳) 전부 변경 없음
        유지 확인.
+   v2.2.163 (2026-09-03) : 🔍 海上運賃タブ フリー検索に B/L No.を追加
+     (사용자 요청 — "海上運賃탭, 検索条件의 フリー検索에 B/L No.도 추가 해 주세요")
+     - **핵심 변경**: `maritimeMatchesExcept()`의 `freeText` 분기에 `partialMatch(b.blNumber,
+       f.freeText)` 조건을 追加(기존 invoiceNo/bookingNo 부분일치에 OR로 결합). render/export
+       양쪽이 이미 `maritimeMatchesExcept(b, null)` 공용 호출을 쓰는 구조(v2.2.159)라 이 1곳
+       수정만으로 화면 표시·Excel出力 양쪽에 자동 반영됨.
+     - `mt-freetext` placeholder를 "Invoice No / Booking No のいずれかに部分一致" →
+       "Invoice No / Booking No / B/L No. のいずれかに部分一致"로 갱신.
+     - `wireFreeTextAutocomplete('mt-freetext', ...)`의 후보(候補) 대상 필드 목록에
+       `'blNumber'`를 추가해 오토컴플리트 드롭다운에도 B/L No. 후보가 함께 표시되도록 함.
+     - **범위 밖(변경 없음)**: B/L No. 전용 複数選択(OR) 필터(`msel-mt-blnumber`)는 그대로
+       유지 — 이번 변경은 フリー検索(部分一致) 입력창에 B/L No.를 추가 대상으로 넣은 것뿐이며,
+       기존 필터 UI/필드 구성·다른 5개 탭 로직·데이터 값은 전부 무변경.
+     - **문법/전체 검토**: `node --check`로 JS 문법 오류 없음 확인. HTML 태그 짝 v2.2.162
+       baseline과 완전히 일치(마크업 변경 없음, `<script>` 내부 1개 함수의 조건식 1줄 + 문자열
+       리터럴 2곳만 수정). `✦ Powered by LEENAI Automation System` 문구 실사용 위치 전부
+       변경 없음 유지 확인.
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -9206,7 +9223,7 @@ function maritimeMatchesExcept(b, exceptDim){
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
   if(exceptDim!=='blNumber' && f.blNumber.selected.length && !f.blNumber.selected.includes(b.blNumber)) return false;
   if(exceptDim!=='carrier' && f.carrier && !partialMatch(b.carrier, f.carrier)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText) || partialMatch(b.blNumber, f.freeText))) return false; // v2.2.163: B/L No.도 フリー検索 대상에 추가(사용자 요청)
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
   if(exceptDim!=='atdMulti' && f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
@@ -9306,7 +9323,7 @@ function initMaritimeTab(){
         </div>
         <div class="filter-group wide">
           <div class="filter-label">フリー検索 <span class="tag-free">部分一致</span> <span class="tag-multi" style="background:var(--accent2-18);" title="入力すると候補がドロップダウンに表示されます">⌄候補表示</span></div>
-          <input type="text" id="mt-freetext" placeholder="Invoice No / Booking No のいずれかに部分一致">
+          <input type="text" id="mt-freetext" placeholder="Invoice No / Booking No / B/L No. のいずれかに部分一致">
         </div>
         <div class="filter-group">
           <div class="filter-label">POL</div>
@@ -9383,7 +9400,7 @@ function initMaritimeTab(){
   renderMultiSelect('msel-mt-booking', 'Booking No', 'multi', bookingOpts, maritimeFilter.bookingNo, refreshMaritimeFilterUI);
   renderMultiSelect('msel-mt-blnumber', 'B/L No.', 'multi', blNumberOpts, maritimeFilter.blNumber, refreshMaritimeFilterUI); // v2.2.104 신규 / v2.2.156: 카스케이드 적용
 
-  wireFreeTextAutocomplete('mt-freetext', q=>freeTextCandidates(bookings, ['invoiceNo','bookingNo'], q), v=>{ maritimeFilter.freeText = v; refreshMaritimeFilterUI(); }); // v2.2.77 신규
+  wireFreeTextAutocomplete('mt-freetext', q=>freeTextCandidates(bookings, ['invoiceNo','bookingNo','blNumber'], q), v=>{ maritimeFilter.freeText = v; refreshMaritimeFilterUI(); }); // v2.2.77 신규, v2.2.163: 候補에 B/L No.도 포함
   document.getElementById('mt-pol').onchange = (e)=>{ maritimeFilter.pol = e.target.value; refreshMaritimeFilterUI(); };
   document.getElementById('mt-pod').onchange = (e)=>{ maritimeFilter.pod = e.target.value; refreshMaritimeFilterUI(); };
   document.getElementById('mt-atd-from').onchange = (e)=>{ maritimeFilter.atdFrom = e.target.value; refreshMaritimeFilterUI(); };
