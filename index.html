@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.163 (2026-09-03)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.164 (2026-09-10)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.163 (2026-09-03) ｜ 海上運賃タブ フリー検索にB/L No.を追加</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.164 (2026-09-10) ｜ 仕入/運送料タブ 取得期間デフォルトを売上タブと統一</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3724,6 +3724,29 @@
        baseline과 완전히 일치(마크업 변경 없음, `<script>` 내부 1개 함수의 조건식 1줄 + 문자열
        리터럴 2곳만 수정). `✦ Powered by LEENAI Automation System` 문구 실사용 위치 전부
        변경 없음 유지 확인.
+
+   v2.2.164 (2026-09-10) : 📅 仕入/運送料タブ 取得期間デフォルトを売上タブと統一(4개월전〜1개월後)
+     (사용자 요청 — "仕入탭, 運送料탭의 取得期間도 売上탭처럼 기본값을 오늘부터 4개월전부터
+     1개월 앞까지로 바꿔주세요. 예를들어, 오늘이 기준이면 2026/5/10~2026/10/10")
+     - **핵심 변경**: `loadLiveDray()`(運送料/仕入 공용 라이브 취득 함수 — 두 탭이 ATD 기준
+       부킹→컨테이너 2단계 조회를 공유하며 `live-work-from/to`도 DRAY_PERIOD 그룹으로 동기화돼
+       있어, 이 1곳 수정으로 両タブ에 동시 반영됨) 내부 `resolveFetchRange('live-work-from',
+       'live-work-to', 4)` 호출의 `monthsForward` 인자를 미지정(기본값 0) → `1`로 변경.
+       売上탭(`loadLiveSales()`의 `resolveFetchRange('live-atd-from','live-atd-to', 4, 1)`,
+       v2.2.103)과 동일하게 [오늘−4개월, 오늘+1개월] 롤링 범위가 됨(취득기간 입력창이
+       비어있을 때 적용되는 기본값 — 입력창에 직접 기간을 넣으면 그 값이 우선되는 기존 동작은
+       무변경).
+     - **v2.2.103 결정 변경 안내**: 기존에는 "運送料/仕入(`crcf9_work_date` 기준)은 海上運賃 같은
+       선불 특성이 없어 `monthsForward` 미확장(오늘까지) 유지"로 명시적으로 결정돼 있었음(§주석
+       참조). 이번 v2.2.164는 그 이전 결정을 사용자가 새 요청으로 명시적으로 변경한 것 — 향후
+       세션에서 "運送料/仕入은 선불이 아니므로 오늘까지만"으로 되돌리지 말 것.
+     - **범위 밖(변경 없음)**: 売上/Commission/通関/海上運賃 4개 탭(`loadLiveSales()`,
+       이미 monthsForward=1)은 무변경. `resolveFetchRange()`의 최대 스팬(6개월) 검증 로직,
+       취득기간 입력창이 채워진 경우의 우선순위 동작, 배지 표시(`dataRangeFrom/To`,
+       `drayRangeFrom/To`) 로직은 전부 무변경.
+     - **문법/전체 검토**: 수정은 함수 호출 인자 1개(`4` → `4, 1`) + 설명 주석뿐, 마크업·HTML
+       태그 변경 없음. `node --check`로 JS 문법 오류 없음 확인. `✦ Powered by LEENAI
+       Automation System` 문구 실사용 위치 전부 변경 없음 유지 확인.
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -4008,7 +4031,7 @@ function computeLiveDataTo(monthsForward=0){
   if(monthsForward) d.setUTCMonth(d.getUTCMonth() + monthsForward);
   return d.toISOString().slice(0,10) + 'T23:59:59Z';
 }
-const LIVE_DATA_TO = computeLiveDataTo(); // 運送料/仕入(loadLiveDray) 등 미확장 기본값용 — 売上/Commission/通関/海上運賃 쪽은 resolveFetchRange 호출 시 monthsForward=1을 직접 전달(하드코딩 상수는 그대로 미사용 시 오늘까지)
+const LIVE_DATA_TO = computeLiveDataTo(); // v2.2.164부터 loadLiveSales()/loadLiveDray() 둘 다 resolveFetchRange 호출 시 monthsForward=1을 직접 전달하므로(売上/Commission/通関/海上運賃/運送料/仕入 공통) 이 하드코딩 상수(미확장, 오늘까지) 자체는 실사용처 없음 — 과거 버전 호환용 정의만 유지
 
 /* v2.2.61 (사용자 요청): "취득건수 입력란은 없애도 되지 않을까요? 테스트해보는데 걸림돌이 되네요.
    예를 들어 6개월치 데이터가 몇건인지 모르니 입력불가, 또 처음 로그인했을때 기본값4개월치를 가져오는
@@ -5041,7 +5064,11 @@ async function loadLiveDray(topN, opts={}){
     // 부킹을 먼저 조회 → ②그 부킹들에 속한 컨테이너만 가져오는 2단계 조회가 필요(사용자 확인 — "정확한
     // 방식"으로 진행 결정, API 호출이 늘어나 다소 느려질 수 있음을 사전 안내함).
     let fetchRange;
-    try{ fetchRange = resolveFetchRange('live-work-from', 'live-work-to', 4); }
+    // v2.2.164 수정(사용자 요청 — "仕入탭, 運送料탭의 取得期間도 売上탭처럼 기본값을 오늘부터 4개월전부터
+    // 1개월 앞까지로 바꿔주세요"): monthsForward 미지정(0) → 1로 변경, 売上/Commission/通関/海上運賃와
+    // 동일하게 [오늘-4개월, 오늘+1개월] 기본 롤링 범위로 통일. v2.2.103에서 "運送料/仕入은 선불 특성이
+    // 없어 monthsForward 미확장 유지"로 결정했던 것을 사용자가 이번 요청으로 명시적으로 변경.
+    try{ fetchRange = resolveFetchRange('live-work-from', 'live-work-to', 4, 1); }
     catch(err){ showLiveError(err.message, errId); if(btn){ btn.disabled=false; btn.textContent='ライブデータ取得'; } return; }
 
     // ①-a ATD(crcf9_bl_etd)가 기간 안에 있는 부킹 GUID 목록만 가져온다(§select 최소화, $top=topN을
