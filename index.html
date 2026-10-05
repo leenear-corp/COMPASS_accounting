@@ -437,7 +437,7 @@
   <div class="splash-logo">LEEN<span>AI</span></div>
   <div class="splash-sys">経理システム</div>
   <div class="splash-title">販売・仕入管理</div>
-  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.164 (2026-09-10)</div>
+  <div class="splash-ver" id="splashVer">COMPASS accounting UI v2.2.165 (2026-10-05)</div>
   <div class="splash-div"></div>
   <div class="splash-desc">
     このツールを使用するには<br>
@@ -462,7 +462,7 @@
   <div class="header-right">
     <button class="theme-toggle-btn" id="btn-theme-toggle" title="ダークモード/ホワイトモード切替">🌙</button>
     <button class="login-btn" id="btn-login">🔐 ログイン (COMPASS)</button>
-    <span class="version-pill">COMPASS accounting UI v2.2.164 (2026-09-10) ｜ 仕入/運送料タブ 取得期間デフォルトを売上タブと統一</span>
+    <span class="version-pill">COMPASS accounting UI v2.2.165 (2026-10-05) ｜ 部分一致フィルタ スマート一致化(候補と一致時は完全一致)</span>
   </div>
 </div>
 <div style="text-align:right; padding:2px 24px 0; font-size:10px; color:var(--text3);">
@@ -3747,6 +3747,26 @@
      - **문법/전체 검토**: 수정은 함수 호출 인자 1개(`4` → `4, 1`) + 설명 주석뿐, 마크업·HTML
        태그 변경 없음. `node --check`로 JS 문법 오류 없음 확인. `✦ Powered by LEENAI
        Automation System` 문구 실사용 위치 전부 변경 없음 유지 확인.
+
+   v2.2.165 (2026-10-05) : 🎯 部分一致フィルタ 全体をスマート一致化(候補と完全一致なら完全一致)
+     (사용자 보고 — "FUJIで検索したのにFUJI_SHIGYO도 같이 나와요" → 잇뽀 추천안 채택,
+     적용 범위: 部分一致 필드 전체)
+     - **원인**: 버그가 아니라 사양. 部分一致 필드는 `partialMatch()`(포함 여부, 대소문자 무시)로
+       비교하므로 "FUJI" 입력 시 "FUJI_SHIGYO"도 포함 관계로 통과했음.
+     - **핵심 변경**: 공용 함수 `smartMatchAny(row, fields, query, dataArr)`(신규, `partialMatch()`
+       바로 아래)를 추가. 입력값(trim·대소문자 무시)이 해당 필드들의 실제 값 목록(후보) 중 하나와
+       정확히 같으면 完全一致, 아니면 기존 部分一致. 후보 Set은 `smartExactSet()`이 1회 렌더
+       패스 동안만 캐시(마이크로태스크에서 자동 폐기 — 데이터 배열이 제자리 갱신되므로 영구
+       캐시하지 않음, 4천행 이상에서도 O(n)).
+     - **적용 위치(9곳, 6탭 전부)**: 売上(販売先/フリー検索) · Commission(フリー検索) ·
+       仕入(購買元/フリー検索) · 運送料(フリー検索) · 通関(フリー検索) · 海上運賃(船社/フリー検索).
+       전부 `{tab}MatchesExcept()` 내부라 화면 표시·Excel出力·카스케이드 선택지에 자동 반영.
+     - **동작 예**: 購買元 "FUJI"/"fuji" → FUJI만 / "FUJI_"·"SHIG" → FUJI_SHIGYO /
+       フリー検索 "NMG2609-02" → 해당 Invoice만(그 문자열을 포함하는 다른 번호 제외).
+     - **범위 밖(변경 없음)**: 마크업·라벨(部分一致 태그)·候補 드롭다운(`freeTextCandidates()`)·
+       完全一致 select 필터·날짜 필터 로직은 무변경. `partialMatch()` 자체도 유지(내부 재사용).
+     - **향후 규칙**: 部分一致 필드를 새로 추가할 때는 `partialMatch()`를 직접 쓰지 말고
+       `smartMatchAny()`를 사용할 것.
    ✦ Powered by LEENAI Automation System
 ============================================================ */
 
@@ -5645,8 +5665,8 @@ function bookingMatchesExcept(b, exceptDim){
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
   if(exceptDim!=='packer' && f.packer.selected.length && !f.packer.selected.includes(b.packer)) return false;
   if(exceptDim!=='saleCO' && f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false; // v2.2.90 신규
-  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
-  if(exceptDim!=='buyer' && f.buyer && !partialMatch(b.buyer, f.buyer)) return false; // v2.2.106: 完全一致→部分一致(候補表示型) / v2.2.157: 대소문자 무시 비교로 수정
+  if(exceptDim!=='freeText' && f.freeText && !smartMatchAny(b, ['invoiceNo','bookingNo'], f.freeText, bookings)) return false; // v2.2.165: 스마트 매칭(후보와 완전일치 시 完全一致)
+  if(exceptDim!=='buyer' && f.buyer && !smartMatchAny(b, ['buyer'], f.buyer, bookings)) return false; // v2.2.165: 스마트 매칭 / v2.2.106: 完全一致→部分一致(候補表示型) / v2.2.157: 대소문자 무시 비교로 수정
   if(exceptDim!=='bankName' && f.bankName && b.bankName !== f.bankName) return false;
   if(exceptDim!=='conditionType' && f.conditionType && b.conditionType !== f.conditionType) return false;
   if(exceptDim!=='conditionDays' && f.conditionDays && String(b.conditionDays) !== f.conditionDays) return false;
@@ -6130,6 +6150,43 @@ function inRange(dateStr, from, to){
 function partialMatch(value, query){
   if(!query) return true;
   return String(value||'').toLowerCase().includes(String(query).toLowerCase());
+}
+
+// v2.2.165 신규: 部分一致 필드 "스마트 매칭" — 입력값이 후보(해당 필드들의 실제 값 목록) 중 하나와
+// 대소문자 무시로 정확히 같으면 完全一致, 아니면 기존 partialMatch()와 동일한 部分一致로 동작.
+// (사용자 보고: "FUJIで検索したのにFUJI_SHIGYO도 같이 나와요" → FUJI 입력/선택 시 FUJI만,
+//  "FUJI_"·"SHIG" 등 후보와 정확히 일치하지 않는 입력은 종전대로 部分一致)
+// 후보 Set은 dataArr+fields 조합별로 1회 렌더 패스 동안만 캐시하고, 마이크로태스크에서 자동
+// 폐기한다(bookings/purchaseContainers는 length=0 → push로 제자리 갱신되므로 영구 캐시 금지).
+const _smartExactCache = new Map();
+let _smartExactCacheClearScheduled = false;
+function smartExactSet(dataArr, fields){
+  const key = (dataArr===purchaseContainers ? 'pc' : dataArr===bookings ? 'bk' : 'x') + '|' + fields.join(',');
+  let set = _smartExactCache.get(key);
+  if(set && set._src === dataArr) return set;
+  set = new Set();
+  set._src = dataArr;
+  for(const row of dataArr){
+    for(const fld of fields){
+      const v = row[fld];
+      if(v !== null && v !== undefined && v !== '') set.add(String(v).trim().toLowerCase());
+    }
+  }
+  _smartExactCache.set(key, set);
+  if(!_smartExactCacheClearScheduled){
+    _smartExactCacheClearScheduled = true;
+    Promise.resolve().then(()=>{ _smartExactCache.clear(); _smartExactCacheClearScheduled = false; });
+  }
+  return set;
+}
+// row의 fields 중 하나라도 query와 매칭되면 true(フリー検索처럼 복수 필드 대상도 이 함수 1개로 처리).
+function smartMatchAny(row, fields, query, dataArr){
+  if(!query) return true;
+  const q = String(query).trim().toLowerCase();
+  if(q && smartExactSet(dataArr, fields).has(q)){
+    return fields.some(fld => String(row[fld]===null || row[fld]===undefined ? '' : row[fld]).trim().toLowerCase() === q);
+  }
+  return fields.some(fld => partialMatch(row[fld], query));
 }
 
 // v2.2.66 신규: 날짜 기간검색 필드의 "미입력만 추출" 모드 판정. emptyOnly가 true면 From/To 값과
@@ -7468,7 +7525,7 @@ function commissionMatchesExcept(b, exceptDim){
   if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
   if(exceptDim!=='saleCO' && f.saleCO.selected.length && !f.saleCO.selected.includes(b.saleCO)) return false;
   if(exceptDim!=='agent' && f.agent.selected.length && !f.agent.selected.includes(b.agent)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.saleCO, f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !smartMatchAny(b, ['invoiceNo','saleCO'], f.freeText, bookings)) return false; // v2.2.165: 스마트 매칭
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(b.agentPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
   if(exceptDim!=='paymentDateMulti' && f.paymentDateMulti.selected.length && !f.paymentDateMulti.selected.includes(b.agentPaymentDate)) return false;
@@ -7891,8 +7948,8 @@ function purchaseMatchesExcept(c, exceptDim){
   if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
   if(exceptDim!=='containerNo' && f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
-  if(exceptDim!=='packer' && f.packer && !partialMatch(c.packer, f.packer)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
+  if(exceptDim!=='packer' && f.packer && !smartMatchAny(c, ['packer'], f.packer, purchaseContainers)) return false; // v2.2.165: 스마트 매칭(FUJI→FUJI_SHIGYO 제외)
+  if(exceptDim!=='freeText' && f.freeText && !smartMatchAny(c, ['invoiceNo','bookingNo','containerNo'], f.freeText, purchaseContainers)) return false; // v2.2.165: 스마트 매칭
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='workRange' && (f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(c.paymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
@@ -8358,7 +8415,7 @@ function drayMatchesExcept(c, exceptDim){
   if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(c.invoiceNo)) return false;
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(c.bookingNo)) return false;
   if(exceptDim!=='containerNo' && f.containerNo.selected.length && !f.containerNo.selected.includes(c.containerNo)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(c.invoiceNo, f.freeText) || partialMatch(c.bookingNo, f.freeText) || partialMatch(c.containerNo, f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !smartMatchAny(c, ['invoiceNo','bookingNo','containerNo'], f.freeText, purchaseContainers)) return false; // v2.2.165: 스마트 매칭
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(c.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='workRange' && (f.workFrom || f.workTo) && !inRange(c.workDate, f.workFrom, f.workTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(c.drayPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
@@ -8807,7 +8864,7 @@ function customsMatchesExcept(b, exceptDim){
   if(exceptDim!=='forwarder' && f.forwarder && b.forwarder !== f.forwarder) return false;
   if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText))) return false;
+  if(exceptDim!=='freeText' && f.freeText && !smartMatchAny(b, ['invoiceNo','bookingNo'], f.freeText, bookings)) return false; // v2.2.165: 스마트 매칭(후보와 완전일치 시 完全一致)
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(b.customPaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
   if(exceptDim!=='atdMulti' && f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
@@ -9249,8 +9306,8 @@ function maritimeMatchesExcept(b, exceptDim){
   if(exceptDim!=='invoiceNo' && f.invoiceNo.selected.length && !f.invoiceNo.selected.includes(b.invoiceNo)) return false;
   if(exceptDim!=='bookingNo' && f.bookingNo.selected.length && !f.bookingNo.selected.includes(b.bookingNo)) return false;
   if(exceptDim!=='blNumber' && f.blNumber.selected.length && !f.blNumber.selected.includes(b.blNumber)) return false;
-  if(exceptDim!=='carrier' && f.carrier && !partialMatch(b.carrier, f.carrier)) return false;
-  if(exceptDim!=='freeText' && f.freeText && !(partialMatch(b.invoiceNo, f.freeText) || partialMatch(b.bookingNo, f.freeText) || partialMatch(b.blNumber, f.freeText))) return false; // v2.2.163: B/L No.도 フリー検索 대상에 추가(사용자 요청)
+  if(exceptDim!=='carrier' && f.carrier && !smartMatchAny(b, ['carrier'], f.carrier, bookings)) return false; // v2.2.165: 스마트 매칭
+  if(exceptDim!=='freeText' && f.freeText && !smartMatchAny(b, ['invoiceNo','bookingNo','blNumber'], f.freeText, bookings)) return false; // v2.2.165: 스마트 매칭 / v2.2.163: B/L No.도 フリー検索 대상에 추가(사용자 요청)
   if(exceptDim!=='atdRange' && (f.atdFrom || f.atdTo) && !inRange(b.atd, f.atdFrom, f.atdTo)) return false;
   if(exceptDim!=='paymentRange' && !matchDateField(b.maritimePaymentDate, f.paymentFrom, f.paymentTo, f.paymentEmpty)) return false;
   if(exceptDim!=='atdMulti' && f.atdMulti.selected.length && !f.atdMulti.selected.includes(b.atd)) return false;
